@@ -116,6 +116,11 @@ async def dashboard(request: Request):
     if story_files:
         latest_story = story_files[0].name
 
+    latest_story_video = None
+    story_video_files = sorted(PROCESSED_STORIES_DIR.glob("*.mp4"), key=os.path.getmtime, reverse=True)
+    if story_video_files:
+        latest_story_video = story_video_files[0].name
+
     latest_video = None
     video_files = sorted(PROCESSED_VIDEOS_DIR.glob("*.mp4"), key=os.path.getmtime, reverse=True)
     if video_files:
@@ -150,6 +155,7 @@ async def dashboard(request: Request):
             "stories": stories,
             "history": history,
             "latest_story": latest_story,
+            "latest_story_video": latest_story_video,
             "latest_video": latest_video,
             "latest_report": latest_report,
             "schedule_days": schedule_days,

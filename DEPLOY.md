@@ -217,3 +217,30 @@ Lorsque le client validera la bascule sur les comptes officiels :
 1. Modifiez les identifiants dans `.env` ou directement via l'onglet **Identifiants & IA** de l'interface Web.
 2. Pour TikTok officiel, déposez les nouveaux cookies de session dans `data/tiktok_cookies.json`.
 3. Redémarrez le conteneur (`docker compose restart`).
+
+---
+
+## 11. Pipeline CI/CD GitHub Actions (Déploiement Automatique)
+
+Le dépôt dispose d'un pipeline d'intégration et de déploiement continu dans `.github/workflows/deploy.yml`.
+
+À chaque `git push origin main` :
+1. **Tests & Qualité** : Validation automatique de la syntaxe Python et des dépendances.
+2. **Déploiement Continu** : Connexion SSH sécurisée au serveur VPS Oracle Cloud, mise à jour du code via `git pull` et reconstruction du conteneur Docker.
+
+### Configuration des Secrets GitHub (À faire une seule fois)
+
+Sur votre dépôt GitHub (`https://github.com/madptitprince/auto-publi`) :
+1. Rendez-vous dans **Settings** > **Secrets and variables** > **Actions**
+2. Cliquez sur **New repository secret** et ajoutez les secrets suivants :
+
+| Nom du Secret | Valeur recommandée | Description |
+| :--- | :--- | :--- |
+| `VPS_HOST` | `158.178.198.34` | Adresse IP publique du VPS Oracle Cloud |
+| `VPS_USER` | `ubuntu` | Utilisateur SSH par défaut |
+| `VPS_SSH_KEY` | *(Contenu de `~/.ssh/id_ed25519`)* | Clé privée SSH permettant l'accès sans mot de passe |
+
+Pour afficher votre clé privée à copier dans GitHub :
+```bash
+cat ~/.ssh/id_ed25519
+```

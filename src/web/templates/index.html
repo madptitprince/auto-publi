@@ -121,7 +121,11 @@
               </div>
               <div class="preview-device-mockup">
                 <div class="preview-frame">
-                  {% if latest_story %}
+                  {% if latest_story_video %}
+                  <video controls playsinline preload="metadata">
+                    <source src="/media/processed/stories/{{ latest_story_video }}?t={{ range(1, 9999)|random }}" type="video/mp4">
+                  </video>
+                  {% elif latest_story %}
                   <img src="/media/processed/stories/{{ latest_story }}?t={{ range(1, 9999)|random }}" alt="Story du jour" loading="lazy">
                   {% else %}
                   <div class="preview-empty">Aucune story generee</div>

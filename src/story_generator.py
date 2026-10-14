@@ -1,5 +1,6 @@
 import random
 import datetime
+import subprocess
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -8,6 +9,7 @@ from src.config import (
     PROCESSED_STORIES_DIR,
     DEFAULT_FONT,
     DAYS_FR,
+    BASE_DIR,
     get_opening_hours,
 )
 
@@ -117,6 +119,106 @@ def generate_daily_story(
         "hours": hours_text,
         "date": (target_date or datetime.date.today()).isoformat(),
     }
+
+
+def get_daily_audio_track(day_en: str) -> Path | None:
+    """
+    Selects the audio track for the day (e.g., monday.mp3, tuesday.mp3...)
+    from assets/audio/, with fallback to default.mp3 or any available audio file.
+    """
+    audio_dir = BASE_DIR / "assets" / "audio"
+    if not audio_dir.exists():
+        return None
+
+    day_key = day_en.lower().strip()
+    candidates = [
+        audio_dir / f"{day_key}.mp3",
+        audio_dir / f"{day_key}.wav",
+        audio_dir / f"{day_key}.m4a",
+    ]
+    for c in candidates:
+        if c.exists() and c.is_file():
+            return c
+
+    default_candidates = [
+        audio_dir / "default.mp3",
+        audio_dir / "default.wav",
+    ]
+    for dc in default_candidates:
+        if dc.exists() and dc.is_file():
+            return dc
+
+    all_audios = sorted(
+        [p for p in audio_dir.iterdir() if p.is_file() and p.suffix.lower() in {".mp3", ".wav", ".m4a"} and not p.name.startswith(".")]
+    )
+    if all_audios:
+        return all_audios[0]
+
+    return None
+
+
+def create_story_video(
+    image_path: Path,
+    target_date: datetime.date | None = None,
+    duration: int = 15,
+    output_filename: str | None = None,
+) -> Path:
+    """
+    Renders a 15-second vertical MP4 video story from the image and today's day-specific audio track.
+    Enables native Instagram Story playback with audio.
+    """
+    if not image_path.exists():
+        raise FileNotFoundError(f"Image story introuvable : {image_path}")
+
+    if target_date is None:
+        target_date = datetime.date.today()
+
+    day_en = target_date.strftime("%A")
+    audio_track = get_daily_audio_track(day_en)
+
+    date_str = target_date.strftime("%Y-%m-%d")
+    if not output_filename:
+        output_filename = f"story_{date_str}.mp4"
+    output_path = PROCESSED_STORIES_DIR / output_filename
+
+    # FFmpeg command: loop image for `duration` seconds, attach audio with soft 1s fade-in/out
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1",
+        "-framerate", "30",
+        "-t", str(duration),
+        "-i", str(image_path),
+    ]
+
+    if audio_track and audio_track.exists():
+        cmd.extend([
+            "-i", str(audio_track),
+            "-filter_complex", f"[1:a]atrim=0:{duration},afade=t=in:ss=0:d=1,afade=t=out:st={duration-1.5}:d=1.5[outa]",
+            "-map", "0:v:0",
+            "-map", "[outa]",
+            "-c:a", "aac",
+            "-b:a", "192k",
+        ])
+    else:
+        # Fallback silent audio if no audio file present
+        cmd.extend([
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-shortest",
+        ])
+
+    cmd.extend([
+        "-c:v", "libx264",
+        "-preset", "faster",
+        "-crf", "20",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        str(output_path),
+    ])
+
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    return output_path
 
 
 if __name__ == "__main__":

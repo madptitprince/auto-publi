@@ -12,7 +12,7 @@ from src.config import (
     HISTORY_FILE,
     BASE_DIR,
 )
-from src.story_generator import generate_daily_story
+from src.story_generator import generate_daily_story, create_story_video
 from src.ai_analyzer import analyze_video_with_gemini
 from src.video_processor import process_video_with_hook
 from src.publisher.instagram import InstagramPublisher
@@ -131,13 +131,23 @@ def run_daily_publication(
     }
 
     try:
-        # Step 1: Generate Story
+        # Step 1: Generate Story (Image + 15s MP4 Video with Day Audio)
         if progress_callback:
-            progress_callback("Génération de la story Instagram...", 15)
+            progress_callback("Génération de la story (Horaires + Audio 15s)...", 15)
         print(f"[{timestamp_str}] Étape 1 : Génération de la story quotidienne...")
         story_res = generate_daily_story(
             output_filename=f"story_{date_str}.png"
         )
+        try:
+            story_video_path = create_story_video(
+                image_path=Path(story_res["output_path"]),
+                target_date=now.date(),
+                duration=15,
+                output_filename=f"story_{date_str}.mp4",
+            )
+            story_res["video_path"] = str(story_video_path)
+        except Exception as e_vid:
+            print(f"Avertissement : rendu vidéo story non disponible ({e_vid}), repli sur image statique.")
         report["story"] = story_res
 
         # Step 2: Pick Video with Rotation & Archive fallback
@@ -251,9 +261,14 @@ def run_daily_publication(
         insta = InstagramPublisher()
         tiktok = TikTokPublisher()
 
-        # Story Instagram
+        # Story Instagram (Publiée en vidéo 15s avec l'audio du jour, ou repli image)
+        story_to_publish = (
+            Path(story_res["video_path"])
+            if story_res.get("video_path") and Path(story_res["video_path"]).exists()
+            else Path(story_res["output_path"])
+        )
         insta_story_res = insta.publish_story(
-            image_path=Path(story_res["output_path"]),
+            media_path=story_to_publish,
             simulation=is_simulation,
         )
         report["publications"].append(insta_story_res)

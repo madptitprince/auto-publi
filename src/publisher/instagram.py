@@ -119,17 +119,23 @@ class InstagramPublisher:
 
         return None
 
-    def publish_story(self, image_path: Path, simulation: bool = True) -> dict:
-        """Publishes a clean photo story without location stickers or video overhead."""
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image story introuvable : {image_path}")
+    def publish_story(self, media_path: Path, simulation: bool = True) -> dict:
+        """
+        Publishes a story to Instagram.
+        Supports both 15s MP4 video stories (with native audio) and static PNG/JPG photos.
+        """
+        if not media_path.exists():
+            raise FileNotFoundError(f"Fichier story introuvable : {media_path}")
+
+        is_video = media_path.suffix.lower() in {".mp4", ".mov"}
 
         if simulation or not self.username or not self.password:
             return {
                 "platform": "instagram",
                 "type": "story",
                 "status": "simulated",
-                "file": str(image_path),
+                "file": str(media_path),
+                "is_video": is_video,
                 "message": (
                     "Story prête et validée (Mode simulation ou identifiants manquants). "
                     "Renseignez INSTAGRAM_USERNAME et INSTAGRAM_PASSWORD pour poster en direct."
@@ -139,15 +145,19 @@ class InstagramPublisher:
         try:
             cl = self._get_client()
 
-            # Upload clean photo story directly without location stickers as requested
-            print(f"Publication directe de la story photo Instagram : {image_path.name}...")
-            media = cl.photo_upload_to_story(str(image_path))
+            if is_video:
+                print(f"Publication de la story vidéo Instagram avec son : {media_path.name}...")
+                media = cl.video_upload_to_story(str(media_path))
+            else:
+                print(f"Publication directe de la story photo Instagram : {media_path.name}...")
+                media = cl.photo_upload_to_story(str(media_path))
 
             return {
                 "platform": "instagram",
                 "type": "story",
                 "status": "published",
                 "media_id": str(media.pk),
+                "is_video": is_video,
             }
         except Exception as e:
             return {
