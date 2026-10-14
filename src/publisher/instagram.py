@@ -12,7 +12,67 @@ class InstagramPublisher:
         self.password = password or os.getenv("INSTAGRAM_PASSWORD")
         self.session_file = Path("data/instagram_session.json")
 
+    @staticmethod
+    def _patch_instagrapi_ffmpeg():
+        from instagrapi import Client
+        import subprocess
+
+        def custom_render_story_video_with_music(
+            self,
+            path: Path,
+            track,
+            output_path: Path,
+            audio_asset_start_time: int,
+            is_photo: bool = False,
+            duration: Optional[float] = None,
+            music_volume: float = 1.0,
+        ) -> float:
+            tmpaudio = self.track_download_by_url(
+                self._story_music_track_url(track),
+                "track",
+                output_path.parent,
+            )
+            duration_sec = float(duration or 15.0)
+            start_sec = float(audio_asset_start_time or 0) / 1000.0
+
+            if is_photo:
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-loop", "1",
+                    "-i", str(path),
+                    "-ss", str(start_sec),
+                    "-t", str(duration_sec),
+                    "-i", str(tmpaudio),
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-pix_fmt", "yuv420p",
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    "-shortest",
+                    str(output_path),
+                ]
+            else:
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", str(path),
+                    "-ss", str(start_sec),
+                    "-t", str(duration_sec),
+                    "-i", str(tmpaudio),
+                    "-filter_complex", f"[1:a]volume={music_volume}[ma];[0:a][ma]amix=inputs=2[outa]",
+                    "-map", "0:v",
+                    "-map", "[outa]",
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-shortest",
+                    str(output_path),
+                ]
+            subprocess.run(cmd, check=True)
+            return duration_sec
+
+        Client._render_story_video_with_music = custom_render_story_video_with_music
+
     def _get_client(self):
+        self._patch_instagrapi_ffmpeg()
         from instagrapi import Client
         cl = Client()
         if self.session_file.exists():
@@ -38,8 +98,8 @@ class InstagramPublisher:
             print(f"Erreur recherche lieu BCHEF Instagram : {e}")
         return None
 
-    def get_suggested_music_track(self, cl) -> Optional[dict]:
-        """Fetches the #1 trending/suggested music track by Instagram."""
+    def get_suggested_music_track(self, cl) -> Optional[object]:
+        """Fetches the #1 trending/suggested music track by Instagram, with search fallback."""
         try:
             trending = cl.music_trending()
             if trending and "items" in trending and len(trending["items"]) > 0:
@@ -48,6 +108,15 @@ class InstagramPublisher:
                     return track
         except Exception as e:
             print(f"Erreur récupération musique tendance Instagram : {e}")
+
+        # Fallback to search if trending is unavailable
+        try:
+            tracks = cl.search_music("chill")
+            if tracks and len(tracks) > 0:
+                return tracks[0]
+        except Exception as e_search:
+            print(f"Erreur recherche musique de secours : {e_search}")
+
         return None
 
     def publish_story(self, image_path: Path, simulation: bool = True) -> dict:
@@ -89,7 +158,10 @@ class InstagramPublisher:
 
             if suggested_track:
                 try:
-                    used_music = f"{suggested_track.get('title')} - {suggested_track.get('display_artist')}"
+                    if hasattr(suggested_track, "title"):
+                        used_music = f"{suggested_track.title} - {getattr(suggested_track, 'display_artist', '')}"
+                    else:
+                        used_music = f"{suggested_track.get('title')} - {suggested_track.get('display_artist')}"
                     print(f"Publication de la story avec la musique suggérée : {used_music}")
                     media = cl.photo_upload_to_story_with_music(
                         path=image_path,
