@@ -60,6 +60,13 @@ tar --exclude='.venv' \
     --exclude='*.pyc' \
     --exclude='.git' \
     --exclude='.tempmediaStorage' \
+    --exclude='processed/videos/*' \
+    --exclude='processed/stories/*' \
+    --exclude='processed/archive/*' \
+    --exclude='data/history.json' \
+    --exclude='data/instagram_session.json' \
+    --exclude='data/tiktok_cookies.json' \
+    --exclude='*.log' \
     -czf - . | ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" "$VPS_USER@$VPS_IP" "tar -xzf - -C ~/auto-publi"
 
 # 4. Lancement du conteneur Docker avec docker compose
