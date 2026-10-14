@@ -10,6 +10,7 @@ from src.config import (
     UPLOADS_VIDEOS_DIR,
     ARCHIVE_VIDEOS_DIR,
     HISTORY_FILE,
+    BASE_DIR,
 )
 from src.story_generator import generate_daily_story
 from src.ai_analyzer import analyze_video_with_gemini
@@ -99,12 +100,15 @@ def delete_archived_file(archived_filename: str) -> bool:
 def run_daily_publication(
     is_simulation: bool = True,
     custom_video_name: str | None = None,
+    custom_hook: str | None = None,
+    custom_description: str | None = None,
+    custom_hashtags: list[str] | None = None,
     progress_callback=None,
 ) -> dict:
     """
     Executes the full automated workflow:
     1. Generates the daily story with opening hours
-    2. Picks a video from queue (or recycled archive) and analyzes it with Gemini
+    2. Picks a video from queue (or recycled archive) and reuses pre-approved texts or analyzes it with Gemini
     3. Burns the hook onto the video
     4. Posts to Instagram & TikTok (or simulates)
     5. Archives the used video (rotation)
@@ -170,16 +174,63 @@ def run_daily_publication(
         report["raw_video"] = str(selected_video.name)
         report["recycled_from_archive"] = is_recycled
 
-        # Step 3: AI Analysis (Hook, Description, Hashtags)
-        if progress_callback:
-            progress_callback("Analyse IA multimodale (Gemini)...", 50)
-        print(f"[{timestamp_str}] Étape 3 : Analyse IA de la vidéo...")
-        ai_data = analyze_video_with_gemini(selected_video)
-        report["ai_analysis"] = ai_data
+        # Step 3: AI Analysis / Pre-approved Text (Hook, Description, Hashtags)
+        ai_data = None
 
-        hook_text = ai_data.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !")
-        caption_line = ai_data.get("description", "Rejoignez-nous chez BCHEF Bourges au 13 place Gordaine !")
-        hashtags_list = ai_data.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
+        if custom_hook and custom_description:
+            # 1. Use texts validated by user from web preview (bypasses Gemini, saves tokens)
+            if progress_callback:
+                progress_callback("Utilisation des textes validés en prévisualisation...", 50)
+            print(f"[{timestamp_str}] Étape 3 : Réutilisation des textes validés (aucun appel Gemini, 0 token consommé)...")
+            hashtags_list = custom_hashtags if custom_hashtags else ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"]
+            hook_text = custom_hook
+            caption_line = custom_description
+            ai_data = {
+                "hook": hook_text,
+                "description": caption_line,
+                "hashtags": hashtags_list,
+                "source": "pre_approved_preview",
+            }
+        else:
+            # 2. Check if cached analysis exists for this video
+            cache_file = BASE_DIR / "data" / "last_ai_analysis.json"
+            cached = None
+            if cache_file.exists():
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        cached_data = json.load(f)
+                        if cached_data.get("video_name") == selected_video.name and "analysis" in cached_data:
+                            cached = cached_data["analysis"]
+                except Exception as e:
+                    print(f"Erreur lecture cache IA : {e}")
+
+            if cached and cached.get("hook") and cached.get("description"):
+                if progress_callback:
+                    progress_callback("Réutilisation de l'analyse IA en cache...", 50)
+                print(f"[{timestamp_str}] Étape 3 : Analyse trouvée en cache pour {selected_video.name} (0 token consommé)...")
+                ai_data = cached
+                hook_text = ai_data["hook"]
+                caption_line = ai_data["description"]
+                hashtags_list = ai_data.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
+            else:
+                # 3. Fresh analysis via Gemini
+                if progress_callback:
+                    progress_callback("Analyse IA multimodale (Gemini)...", 50)
+                print(f"[{timestamp_str}] Étape 3 : Analyse IA de la vidéo via Gemini...")
+                ai_data = analyze_video_with_gemini(selected_video)
+                hook_text = ai_data.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !")
+                caption_line = ai_data.get("description", "Rejoignez-nous chez BCHEF Bourges au 13 place Gordaine !")
+                hashtags_list = ai_data.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
+
+                # Save cache for reuse
+                try:
+                    cache_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(cache_file, "w", encoding="utf-8") as f:
+                        json.dump({"video_name": selected_video.name, "analysis": ai_data}, f, ensure_ascii=False, indent=2)
+                except Exception as e_cache:
+                    print(f"Erreur écriture cache IA : {e_cache}")
+
+        report["ai_analysis"] = ai_data
         full_caption = f"{caption_line}\n\n{' '.join(hashtags_list)}"
 
         # Step 4: Video Processing (Burn hook)

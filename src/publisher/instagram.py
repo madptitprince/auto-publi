@@ -120,7 +120,7 @@ class InstagramPublisher:
         return None
 
     def publish_story(self, image_path: Path, simulation: bool = True) -> dict:
-        """Publishes a photo story with location and suggested background music to Instagram."""
+        """Publishes a clean photo story without location stickers or video overhead."""
         if not image_path.exists():
             raise FileNotFoundError(f"Image story introuvable : {image_path}")
 
@@ -130,8 +130,6 @@ class InstagramPublisher:
                 "type": "story",
                 "status": "simulated",
                 "file": str(image_path),
-                "location": "BCHEF - 13 Place Gordaine, Bourges",
-                "music": "Musique suggérée n°1 par Instagram",
                 "message": (
                     "Story prête et validée (Mode simulation ou identifiants manquants). "
                     "Renseignez INSTAGRAM_USERNAME et INSTAGRAM_PASSWORD pour poster en direct."
@@ -139,51 +137,17 @@ class InstagramPublisher:
             }
 
         try:
-            from instagrapi.types import StoryLocation
-
             cl = self._get_client()
 
-            # 1. Location tagging
-            bchef_loc = self.get_bchef_location(cl)
-            story_locations = []
-            if bchef_loc:
-                story_locations.append(
-                    StoryLocation(location=bchef_loc, x=0.5, y=0.85, width=0.4, height=0.08)
-                )
-
-            # 2. Suggested music
-            suggested_track = self.get_suggested_music_track(cl)
-            media = None
-            used_music = None
-
-            if suggested_track:
-                try:
-                    if hasattr(suggested_track, "title"):
-                        used_music = f"{suggested_track.title} - {getattr(suggested_track, 'display_artist', '')}"
-                    else:
-                        used_music = f"{suggested_track.get('title')} - {suggested_track.get('display_artist')}"
-                    print(f"Publication de la story avec la musique suggérée : {used_music}")
-                    media = cl.photo_upload_to_story_with_music(
-                        path=image_path,
-                        caption="",
-                        track=suggested_track,
-                        locations=story_locations,
-                    )
-                except Exception as e_music:
-                    print(f"Upload avec musique échoué ({e_music}), repli sur upload standard avec lieu.")
-                    media = None
-
-            # Fallback without music if music upload fails or unavailable
-            if media is None:
-                media = cl.photo_upload_to_story(str(image_path), locations=story_locations)
+            # Upload clean photo story directly without location stickers as requested
+            print(f"Publication directe de la story photo Instagram : {image_path.name}...")
+            media = cl.photo_upload_to_story(str(image_path))
 
             return {
                 "platform": "instagram",
                 "type": "story",
                 "status": "published",
                 "media_id": str(media.pk),
-                "location": bchef_loc.name if bchef_loc else "Bourges",
-                "music": used_music or "Standard",
             }
         except Exception as e:
             return {

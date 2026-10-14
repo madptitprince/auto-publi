@@ -6,7 +6,36 @@ from PIL import Image, ImageDraw, ImageFont
 from src.config import (
     PROCESSED_VIDEOS_DIR,
     DEFAULT_FONT,
+    BASE_DIR,
 )
+
+
+def get_hook_font(font_size: int) -> ImageFont.FreeTypeFont:
+    """
+    Selects the best available font for the hook badge:
+    1. Indivisible (if present in assets/fonts/ or system)
+    2. Montserrat-ExtraBold (modern, bold geometric sans-serif)
+    3. Montserrat-Bold
+    4. DEFAULT_FONT fallback
+    """
+    fonts_dir = BASE_DIR / "assets" / "fonts"
+    if fonts_dir.exists():
+        # Case-insensitive search for any Indivisible font file
+        for f in sorted(fonts_dir.iterdir()):
+            if "indivisible" in f.name.lower() and f.suffix.lower() in {".ttf", ".otf"}:
+                try:
+                    return ImageFont.truetype(str(f), font_size)
+                except Exception:
+                    pass
+        # High-impact geometric sans-serif fallback
+        for fallback in ["Montserrat-ExtraBold.ttf", "Montserrat-Bold.ttf"]:
+            fp = fonts_dir / fallback
+            if fp.exists():
+                try:
+                    return ImageFont.truetype(str(fp), font_size)
+                except Exception:
+                    pass
+    return ImageFont.truetype(DEFAULT_FONT, font_size)
 
 
 def create_hook_badge(
@@ -22,7 +51,7 @@ def create_hook_badge(
     """
     scale = video_width / 1080.0
     actual_font_size = int(font_size * scale)
-    font = ImageFont.truetype(DEFAULT_FONT, actual_font_size)
+    font = get_hook_font(actual_font_size)
 
     # Word wrap
     max_text_width = int(video_width * 0.78)
@@ -109,7 +138,7 @@ def process_video_with_hook(
     hook_text: str,
     output_filename: str | None = None,
     hook_duration: int | None = None,
-    y_ratio: float = 0.19,
+    y_ratio: float = 0.13,
 ) -> dict:
     """
     Overlays a clean white hook badge on top of the video (until the end by default).

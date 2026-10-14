@@ -372,6 +372,13 @@ async function checkAndPollPublicationStatus() {
 
 async function triggerPublication() {
   const isSim = document.getElementById("check-simulation")?.checked ?? true;
+  const hookInput = document.getElementById("hook-input");
+  const descInput = document.getElementById("desc-input");
+  const hookVal = hookInput ? hookInput.value.trim() : "";
+  const descVal = descInput ? descInput.value.trim() : "";
+
+  const tagElements = document.querySelectorAll("#tags-container .tag-item");
+  const tags = Array.from(tagElements).map(el => el.textContent.trim()).filter(Boolean);
 
   updateTriggerButtons(true, "Demarrage (5%)...");
   showToast("Lancement du pipeline de publication...");
@@ -379,6 +386,9 @@ async function triggerPublication() {
   try {
     const formData = new FormData();
     formData.append("simulation", isSim ? "true" : "false");
+    if (hookVal) formData.append("hook", hookVal);
+    if (descVal) formData.append("description", descVal);
+    if (tags.length > 0) formData.append("hashtags", JSON.stringify(tags));
 
     const res = await fetch("/api/trigger/publish", {
       method: "POST",

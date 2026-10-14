@@ -122,6 +122,18 @@ async def dashboard(request: Request):
         latest_video = video_files[0].name
 
     latest_report = history[0] if history else None
+    cache_ai_file = BASE_DIR / "data" / "last_ai_analysis.json"
+    if (not latest_report or not latest_report.get("ai_analysis")) and cache_ai_file.exists():
+        try:
+            with open(cache_ai_file, "r", encoding="utf-8") as f:
+                cdata = json.load(f)
+                if cdata.get("analysis"):
+                    if not latest_report:
+                        latest_report = {"ai_analysis": cdata["analysis"]}
+                    else:
+                        latest_report["ai_analysis"] = cdata["analysis"]
+        except Exception:
+            pass
     has_gemini_key = bool(os.getenv("GEMINI_API_KEY"))
 
     # Next run calculation
@@ -232,7 +244,13 @@ publication_status = {
 
 
 @app.post("/api/trigger/publish")
-async def trigger_publish(simulation: bool = Form(True), video_name: str = Form(None)):
+async def trigger_publish(
+    simulation: bool = Form(True),
+    video_name: str = Form(None),
+    hook: str = Form(None),
+    description: str = Form(None),
+    hashtags: str = Form(None),
+):
     global publication_status
     if publication_status["is_running"]:
         return JSONResponse(
@@ -253,7 +271,22 @@ async def trigger_publish(simulation: bool = Form(True), video_name: str = Form(
         "report": None,
     }
 
-    def background_worker(is_sim: bool, v_name: str | None):
+    parsed_tags = None
+    if hashtags:
+        try:
+            parsed = json.loads(hashtags)
+            if isinstance(parsed, list):
+                parsed_tags = [str(t).strip() for t in parsed if str(t).strip()]
+        except Exception:
+            parsed_tags = [t.strip() for t in hashtags.split() if t.strip()]
+
+    def background_worker(
+        is_sim: bool,
+        v_name: str | None,
+        c_hook: str | None,
+        c_desc: str | None,
+        c_tags: list[str] | None,
+    ):
         global publication_status
 
         def progress_cb(step_name: str, pct: int):
@@ -275,6 +308,9 @@ async def trigger_publish(simulation: bool = Form(True), video_name: str = Form(
             res = run_daily_publication(
                 is_simulation=is_sim,
                 custom_video_name=v_name if v_name else None,
+                custom_hook=c_hook.strip() if c_hook and c_hook.strip() else None,
+                custom_description=c_desc.strip() if c_desc and c_desc.strip() else None,
+                custom_hashtags=c_tags,
                 progress_callback=progress_cb,
             )
             publication_status["report"] = res
@@ -293,7 +329,7 @@ async def trigger_publish(simulation: bool = Form(True), video_name: str = Form(
 
     thread = threading.Thread(
         target=background_worker,
-        args=(simulation, video_name),
+        args=(simulation, video_name, hook, description, parsed_tags),
         daemon=True,
     )
     thread.start()
@@ -323,6 +359,13 @@ async def regenerate_ai(video_name: str = Form(None)):
         raise HTTPException(status_code=400, detail="Aucune vidéo disponible pour l'analyse.")
 
     analysis = analyze_video_with_gemini(target_video)
+    cache_path = BASE_DIR / "data" / "last_ai_analysis.json"
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump({"video_name": target_video.name, "analysis": analysis}, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Erreur sauvegarde cache IA : {e}")
     return {"status": "success", "analysis": analysis}
 
 
