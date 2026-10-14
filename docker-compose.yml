@@ -1,0 +1,24 @@
+services:
+  bchef-auto-publi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bchef-auto-publi
+    restart: unless-stopped
+    shm_size: '512m'
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Paris
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./uploads:/app/uploads
+      - ./processed:/app/processed
+      - ./data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

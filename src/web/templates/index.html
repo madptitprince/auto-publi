@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#080a0f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>BCHEF Bourges - Automatisation Reseaux Sociaux</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="brand-section">
+      <div class="brand-badge">BCHEF</div>
+      <div class="brand-info">
+        <h1>BCHEF BOURGES</h1>
+        <p>13 Place Gordaine, 18000 Bourges &bull; Publication quotidienne 11h30</p>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-indicator" title="Le planificateur est actif pour 11h30">
+        <span class="status-dot"></span>
+        <span>Planification active</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="tabs-nav" id="main-tabs-nav">
+    <button class="tab-btn active" onclick="switchTab('tab-overview', this)">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Vue d'ensemble</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('tab-videos', this)">
+      <svg class="icon" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      <span>Videos ({{ videos|length }} + {{ archived_videos|length }})</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('tab-stories', this)">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <span>Banque Stories ({{ stories|length }})</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('tab-hours', this)">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Horaires</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('tab-settings', this)">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="3" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Identifiants & IA</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('tab-history', this)">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span>Historique ({{ history|length }})</span>
+    </button>
+  </nav>
+
+  <main class="container">
+
+    <!-- TAB 1 : VUE D'ENSEMBLE -->
+    <section id="tab-overview" class="tab-pane active">
+
+      <!-- Summary Bar -->
+      <div class="summary-bar">
+        <div class="summary-details">
+          <h2>Cycle de publication du jour</h2>
+          <div class="summary-meta">
+            <div class="meta-chip">
+              <span class="chip-label">Jour</span>
+              <strong class="chip-val">{{ day_fr }}</strong>
+            </div>
+            <div class="meta-chip">
+              <span class="chip-label">Horaires</span>
+              <strong class="chip-val">{{ hours }}</strong>
+            </div>
+            <div class="meta-chip">
+              <span class="chip-label">Prochaine execution</span>
+              <strong class="chip-val">{{ next_run }}</strong>
+            </div>
+            <div class="meta-chip">
+              <span class="chip-label">Queue</span>
+              <strong class="chip-val">{{ videos|length }} active(s) &bull; {{ archived_videos|length }} archive(s)</strong>
+            </div>
+          </div>
+        </div>
+        <div class="summary-actions">
+          <label class="toggle-switch-container">
+            <input type="checkbox" id="check-simulation" checked class="toggle-switch-input" onchange="syncSimulationCheckboxes(this)">
+            <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+            <span class="toggle-switch-label">Mode simulation (Test)</span>
+          </label>
+          <button id="btn-trigger" class="btn btn-primary" onclick="triggerPublication()">
+            <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Lancer la publication</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Split Preview -->
+      <div class="grid-2col">
+
+        <!-- Column Left : Previews -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>Apercu visuel des publications</span>
+            </h3>
+            <span class="badge badge-emerald">Pret a diffuser</span>
+          </div>
+
+          <div class="preview-columns">
+            <div class="preview-card">
+              <div class="preview-card-header">
+                <span>Story Instagram ({{ day_fr }})</span>
+                <span class="preview-tag">9:16</span>
+              </div>
+              <div class="preview-device-mockup">
+                <div class="preview-frame">
+                  {% if latest_story %}
+                  <img src="/media/processed/stories/{{ latest_story }}?t={{ range(1, 9999)|random }}" alt="Story du jour" loading="lazy">
+                  {% else %}
+                  <div class="preview-empty">Aucune story generee</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="preview-card">
+              <div class="preview-card-header">
+                <span>Reel & TikTok (Hook 0-4s)</span>
+                <span class="preview-tag">9:16</span>
+              </div>
+              <div class="preview-device-mockup">
+                <div class="preview-frame">
+                  {% if latest_video %}
+                  <video controls playsinline preload="metadata">
+                    <source src="/media/processed/videos/{{ latest_video }}?t={{ range(1, 9999)|random }}" type="video/mp4">
+                    Format video non supporte.
+                  </video>
+                  {% else %}
+                  <div class="preview-empty">Aucune video traitee</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column Right : Metadata Generated by Gemini -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              <span>Textes generes par l'IA (Gemini 3.8 Flash)</span>
+            </h3>
+            <button class="btn btn-secondary btn-sm" onclick="regenerateAI()">
+              <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              <span>Regenerer</span>
+            </button>
+          </div>
+
+          <div class="meta-panel">
+            {% if latest_report and latest_report.ai_analysis and latest_report.ai_analysis.transcription %}
+            <div class="meta-group">
+              <div class="meta-header-row">
+                <span class="meta-label">Transcription audio des dialogues (IA)</span>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">Reconnaissance vocale Gemini</span>
+              </div>
+              <div class="meta-box-content" style="background-color: var(--bg-surface-elevated); font-style: italic; color: #cbd5e1; font-size: 0.8rem; line-height: 1.4;">
+                <span id="transcription-text">{{ latest_report.ai_analysis.transcription }}</span>
+              </div>
+            </div>
+            {% endif %}
+
+            {% if latest_report and latest_report.ai_analysis and latest_report.ai_analysis.contexte %}
+            <div class="meta-group">
+              <div class="meta-header-row">
+                <span class="meta-label">Comprehension du contexte de la scene</span>
+              </div>
+              <div class="meta-box-content" style="background-color: var(--bg-surface-elevated); color: #cbd5e1; font-size: 0.8rem;">
+                <span id="contexte-text">{{ latest_report.ai_analysis.contexte }}</span>
+              </div>
+            </div>
+            {% endif %}
+
+            <div class="meta-group">
+              <div class="meta-header-row">
+                <span class="meta-label">Accroche ecran (Hook incruste - Fond blanc)</span>
+                <button class="btn btn-secondary btn-sm" onclick="copyContent('hook-input')">Copier</button>
+              </div>
+              <div class="meta-box-content">
+                <input type="text" id="hook-input" value="{{ latest_report.ai_analysis.hook if latest_report and latest_report.ai_analysis else 'Quand la responsable n\'est pas la pendant le rush' }}">
+              </div>
+            </div>
+
+            <div class="meta-group">
+              <div class="meta-header-row">
+                <span class="meta-label">Description du post (Instagram & TikTok)</span>
+                <button class="btn btn-secondary btn-sm" onclick="copyContent('desc-input')">Copier</button>
+              </div>
+              <div class="meta-box-content">
+                <textarea id="desc-input" rows="2">{{ latest_report.ai_analysis.description if latest_report and latest_report.ai_analysis else 'Retrouvez toute notre equipe place Gordaine a Bourges pour vos pauses burger.' }}</textarea>
+              </div>
+            </div>
+
+            <div class="meta-group">
+              <div class="meta-header-row">
+                <span class="meta-label">Selection de 5 Hashtags</span>
+              </div>
+              <div class="tags-row" id="tags-container">
+                {% if latest_report and latest_report.ai_analysis and latest_report.ai_analysis.hashtags %}
+                  {% for tag in latest_report.ai_analysis.hashtags %}
+                  <span class="tag-item">{{ tag }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="tag-item">#bchef</span>
+                  <span class="tag-item">#bourges</span>
+                  <span class="tag-item">#placegordaine</span>
+                  <span class="tag-item">#viedequipe</span>
+                  <span class="tag-item">#burgerbourges</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- TAB 2 : GESTION DES VIDEOS -->
+    <section id="tab-videos" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Ajouter une video montee (Format 9:16 vertical)</span>
+          </h3>
+        </div>
+        <div class="dropzone-box" id="dropzone-video-tab" onclick="document.getElementById('input-video-tab').click()">
+          <svg class="icon icon-lg" style="color: var(--brand-orange);" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p>Glissez et deposez votre video ici ou <span>parcourez vos fichiers</span></p>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">Formats acceptes : MP4, MOV &bull; Resolution verticale 1080x1920</p>
+          <input type="file" id="input-video-tab" style="display: none;" accept="video/mp4,video/quicktime" onchange="handleFileUpload(this, 'video')">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg class="icon" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            <span>File d'attente des videos (Queue active)</span>
+          </h3>
+          <span class="badge badge-orange">{{ videos|length }} fichier(s)</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fichier</th>
+                <th>Duree</th>
+                <th>Resolution</th>
+                <th>Poids</th>
+                <th>Date d'upload</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in videos %}
+              <tr>
+                <td data-label="Fichier"><strong>{{ v.name }}</strong></td>
+                <td data-label="Duree"><span class="badge badge-subtle">{{ v.duration_sec }}s</span></td>
+                <td data-label="Resolution"><span class="badge badge-subtle">{{ v.resolution }}</span></td>
+                <td data-label="Poids"><span class="badge badge-subtle">{{ v.size_mb }} Mo</span></td>
+                <td data-label="Date">{{ v.modified }}</td>
+                <td data-label="Actions" class="table-actions-cell">
+                  <button class="btn btn-secondary btn-sm" onclick="previewRawVideo('{{ v.name }}', false)">
+                    <svg class="icon-sm icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Lire</span>
+                  </button>
+                  <button class="btn btn-secondary btn-sm" onclick="archiveVideo('{{ v.name }}')">
+                    <svg class="icon-sm icon" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>
+                    <span>Archiver</span>
+                  </button>
+                  <button class="btn btn-danger btn-sm" onclick="deleteVideo('{{ v.name }}')">
+                    <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    <span>Supprimer</span>
+                  </button>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 36px;">
+                  Aucune video dans la file d'attente. Ajoutez vos fichiers ci-dessus.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Card: Archived & Rotated Videos -->
+      <div class="card" style="margin-top: 24px;">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>
+            <span>Archives & Rotation de secours (Recyclage continu)</span>
+          </h3>
+          <span class="badge badge-emerald">{{ archived_videos|length }} archive(s)</span>
+        </div>
+
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">
+          Chaque video publiee est automatiquement archivee ici. Si la file principale est vide lors de la publication de 11h30, le systeme recycle automatiquement la plus ancienne archive pour eviter toute rupture.
+        </p>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fichier archive</th>
+                <th>Duree</th>
+                <th>Resolution</th>
+                <th>Poids</th>
+                <th>Date d'archivage</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for av in archived_videos %}
+              <tr>
+                <td data-label="Fichier"><strong>{{ av.name }}</strong></td>
+                <td data-label="Duree"><span class="badge badge-subtle">{{ av.duration_sec }}s</span></td>
+                <td data-label="Resolution"><span class="badge badge-subtle">{{ av.resolution }}</span></td>
+                <td data-label="Poids"><span class="badge badge-subtle">{{ av.size_mb }} Mo</span></td>
+                <td data-label="Date">{{ av.modified }}</td>
+                <td data-label="Actions" class="table-actions-cell">
+                  <button class="btn btn-secondary btn-sm" onclick="previewRawVideo('{{ av.name }}', true)">
+                    <svg class="icon-sm icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Lire</span>
+                  </button>
+                  <button class="btn btn-primary btn-sm" onclick="restoreVideo('{{ av.name }}')">
+                    <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    <span>Restaurer</span>
+                  </button>
+                  <button class="btn btn-danger btn-sm" onclick="deleteArchivedVideo('{{ av.name }}')">
+                    <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    <span>Supprimer</span>
+                  </button>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 36px;">
+                  Aucune video archivee pour l'instant. Les videos publiees apparaitront ici automatiquement.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3 : BANQUE D'IMAGES STORIES -->
+    <section id="tab-stories" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Ajouter des visuels pour les stories</span>
+          </h3>
+        </div>
+        <div class="dropzone-box" onclick="document.getElementById('input-story-tab').click()">
+          <svg class="icon icon-lg" style="color: var(--brand-orange);" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <p>Deposez vos photos de story ici ou <span>parcourez vos fichiers</span></p>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">Format attendu : PNG ou JPG vertical 9:16 (1080x1920)</p>
+          <input type="file" id="input-story-tab" style="display: none;" accept="image/png,image/jpeg" multiple onchange="handleFileUpload(this, 'story')">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span>Templates de Story disponibles ({{ stories|length }})</span>
+          </h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Touchez une vignette pour apercevoir ou supprimer</span>
+        </div>
+
+        <div class="stories-gallery">
+          {% for s in stories %}
+          <div class="gallery-item" onclick="previewCustomStory('{{ s }}')">
+            <img src="/media/uploads/stories/{{ s }}" alt="{{ s }}" loading="lazy">
+            <div class="gallery-overlay">
+              <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); previewCustomStory('{{ s }}')">Apercu</button>
+              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteStory('{{ s }}')">Supprimer</button>
+            </div>
+            <div class="gallery-actions-bar">
+              <button class="btn-icon btn-icon-primary" title="Apercu" onclick="event.stopPropagation(); previewCustomStory('{{ s }}')">
+                <svg class="icon-sm icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+              <button class="btn-icon btn-icon-danger" title="Supprimer" onclick="event.stopPropagation(); deleteStory('{{ s }}')">
+                <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4 : HORAIRES DU RESTAURANT -->
+    <section id="tab-hours" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Grille des horaires d'ouverture</span>
+          </h3>
+          <button class="btn btn-primary btn-sm" onclick="saveHours()">
+            <svg class="icon-sm icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span>Enregistrer</span>
+          </button>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+          Ces horaires sont automatiquement injectes dans le bandeau de la story Instagram du jour.
+        </p>
+
+        <form id="form-hours" class="hours-grid">
+          {% for day in schedule_days %}
+          <div class="hours-row">
+            <label class="hours-label"><strong>{{ day.day_fr }}</strong></label>
+            <input type="text" class="form-input hours-input" name="{{ day.day_en }}" value="{{ day.hours }}">
+          </div>
+          {% endfor %}
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 5 : IDENTIFIANTS & CONFIGURATION IA -->
+    <section id="tab-settings" class="tab-pane">
+      <div class="grid-2col">
+
+        <!-- Gemini API Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              <span>Moteur d'analyse IA</span>
+            </h3>
+            <span class="badge badge-emerald">Gemini 3.8 Flash Actif</span>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">
+            Clef API Google Gemini connectee. Le modele analyse les visuels et voix pour rediger les accroches et descriptions.
+          </p>
+          <div class="form-group">
+            <label class="form-label">Clef API Gemini</label>
+            <input type="password" id="input-gemini-key" class="form-input" placeholder="Renseigner une nouvelle clef...">
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="saveCredentials()">Mettre a jour la clef</button>
+        </div>
+
+        <!-- Social Media Accounts Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+              <span>Comptes Reseaux Sociaux (Test)</span>
+            </h3>
+            <span class="badge badge-blue">Mode Test</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Nom d'utilisateur Instagram</label>
+            <input type="text" id="input-insta-user" class="form-input" value="{{ instagram_user }}" placeholder="test_publi00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mot de passe Instagram</label>
+            <input type="password" id="input-insta-pass" class="form-input" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Session TikTok</label>
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
+              {% if has_tiktok %}
+              <span class="badge badge-emerald">Session active (data/tiktok_cookies.json)</span>
+              {% else %}
+              <span class="badge badge-rose">Session non configuree (Mode simulation)</span>
+              {% endif %}
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveCredentials()">Enregistrer les comptes</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 6 : HISTORIQUE -->
+    <section id="tab-history" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <span>Journal complet des publications</span>
+          </h3>
+          <span class="badge badge-emerald">{{ history|length }} publication(s) validee(s)</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date & Heure</th>
+                <th>Video source</th>
+                <th>Story generee</th>
+                <th>Accroche incrustee</th>
+                <th>Statut Instagram</th>
+                <th>Statut TikTok</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in history %}
+              <tr>
+                <td data-label="Date">{{ item.timestamp[:16].replace('T', ' ') }}</td>
+                <td data-label="Video"><strong>{{ item.raw_video or '-' }}</strong></td>
+                <td data-label="Story">{{ item.story.day if item.story else '-' }} ({{ item.story.hours if item.story else '-' }})</td>
+                <td data-label="Accroche" style="max-width: 260px; font-style: italic;">"{{ item.ai_analysis.hook if item.ai_analysis else '-' }}"</td>
+                <td data-label="Instagram"><span class="badge badge-blue">Reel & Story prets</span></td>
+                <td data-label="TikTok"><span class="badge badge-blue">Video prete</span></td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 36px;">
+                  Aucune publication enregistree pour le moment.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Floating Mobile Action Bar (Sticky at bottom on phones) -->
+  <div class="mobile-action-bar">
+    <label class="toggle-switch-container" style="font-size: 0.76rem;">
+      <input type="checkbox" id="check-simulation-mobile" checked class="toggle-switch-input" onchange="syncSimulationCheckboxes(this)">
+      <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
+      <span class="toggle-switch-label">Simulation</span>
+    </label>
+    <button id="btn-trigger-mobile" class="btn btn-primary" onclick="triggerPublication()" style="flex: 1; min-height: 44px;">
+      <svg class="icon-sm icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <span>Publier</span>
+    </button>
+  </div>
+
+  <!-- Modal Video Preview -->
+  <div id="modal-video" class="modal-backdrop" onclick="closeModal('modal-video')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h4 id="modal-video-title" style="font-size: 0.95rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75%;">Apercu de la video</h4>
+        <button class="btn btn-secondary btn-sm" onclick="closeModal('modal-video')">Fermer</button>
+      </div>
+      <div style="width: 100%; aspect-ratio: 9/16; max-height: 520px; background: #000; border-radius: var(--radius-md); overflow: hidden;">
+        <video id="modal-video-player" controls playsinline style="width: 100%; height: 100%; object-fit: contain;"></video>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Story Preview -->
+  <div id="modal-story" class="modal-backdrop" onclick="closeModal('modal-story')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 440px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h4 style="font-size: 0.95rem; font-weight: 700;">Rendu Story Instagram</h4>
+        <button class="btn btn-secondary btn-sm" onclick="closeModal('modal-story')">Fermer</button>
+      </div>
+      <div style="width: 100%; aspect-ratio: 9/16; max-height: 540px; background: #000; border-radius: var(--radius-md); overflow: hidden;">
+        <img id="modal-story-img" src="" style="width: 100%; height: 100%; object-fit: contain;" alt="Apercu Story">
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast-notice" class="toast-notice"></div>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "opening_hours": {
+    "Monday": "11h00 - 22h45",
+    "Tuesday": "11h00 - 22h45",
+    "Wednesday": "11h00 - 22h45",
+    "Thursday": "11h00 - 22h45",
+    "Friday": "11h00 - 23h30",
+    "Saturday": "11h00 - 23h30",
+    "Sunday": "11h30 - 22h00"
+  }
+}

@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment and sensitive credentials
+.env
+*.env
+data/instagram_session.json
+data/tiktok_cookies.json
+data/history.json
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs and runtime data
+*.log
+auto_provision.log
+
+# Dynamic Media (Large videos & processed outputs)
+uploads/videos/*
+!uploads/videos/.gitkeep
+processed/videos/*
+!processed/videos/.gitkeep
+processed/stories/*
+!processed/stories/.gitkeep
+processed/archive/*
+!processed/archive/.gitkeep
+
+# Operating system artifacts
+.DS_Store
+Thumbs.db
+.tempmediaStorage/

@@ -1,0 +1,27 @@
+# Web & API
+fastapi>=0.115.0
+uvicorn>=0.30.0
+jinja2>=3.1.0
+python-multipart>=0.0.12
+
+# Planificateur & Tâches
+apscheduler>=3.10.0
+
+# Traitement Image
+Pillow>=10.0.0
+
+# Intelligence Artificielle
+google-genai>=2.0.0
+
+# Réseaux Sociaux & Automatisation
+instagrapi==3.0.25
+playwright>=1.40.0
+
+# Configuration & Validation
+python-dotenv>=1.0.0
+pydantic>=2.7.0
+
+# Sécurité & Gestion de session
+cryptography>=42.0.0
+pycryptodomex>=3.20.0
+secretstorage>=3.3.0
