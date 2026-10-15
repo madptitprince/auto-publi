@@ -94,6 +94,15 @@
               <span class="chip-label">Queue</span>
               <strong class="chip-val">{{ videos|length }} active(s) &bull; {{ archived_videos|length }} archive(s)</strong>
             </div>
+            <div class="meta-chip">
+              <span class="chip-label">Statut du jour</span>
+              {% if is_today_published %}
+              <strong class="chip-val" style="color: var(--status-emerald);">Publie aujourd'hui</strong>
+              {% else %}
+              <strong class="chip-val" style="color: var(--brand-orange);">Pret pour 11h30</strong>
+              {% endif %}
+            </div>
+
           </div>
         </div>
         <div class="summary-actions">
@@ -131,7 +140,7 @@
               <div class="preview-device-mockup">
                 <div class="preview-frame">
                   {% if latest_story_video %}
-                  <video controls playsinline preload="metadata">
+                  <video id="story-preview-player" controls playsinline preload="metadata">
                     <source src="/media/processed/stories/{{ latest_story_video }}?t={{ range(1, 9999)|random }}" type="video/mp4">
                   </video>
                   {% elif latest_story %}
@@ -151,7 +160,7 @@
               <div class="preview-device-mockup">
                 <div class="preview-frame">
                   {% if latest_video %}
-                  <video controls playsinline preload="metadata">
+                  <video id="reel-preview-player" controls playsinline preload="metadata">
                     <source src="/media/processed/videos/{{ latest_video }}?t={{ range(1, 9999)|random }}" type="video/mp4">
                     Format video non supporte.
                   </video>

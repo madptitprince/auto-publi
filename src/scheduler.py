@@ -10,6 +10,9 @@ from src.config import (
     UPLOADS_VIDEOS_DIR,
     ARCHIVE_VIDEOS_DIR,
     HISTORY_FILE,
+    TODAY_PREVIEW_FILE,
+    PROCESSED_VIDEOS_DIR,
+    PROCESSED_STORIES_DIR,
     BASE_DIR,
 )
 from src.story_generator import generate_daily_story, create_story_video
@@ -35,6 +38,27 @@ def save_history_entry(entry: dict):
     HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
+
+
+def get_today_preview() -> dict | None:
+    """Reads the locked daily preview contract from data/today_preview.json."""
+    if TODAY_PREVIEW_FILE.exists():
+        try:
+            with open(TODAY_PREVIEW_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Erreur lecture today_preview.json : {e}")
+    return None
+
+
+def save_today_preview(data: dict):
+    """Saves the locked daily preview contract into data/today_preview.json."""
+    try:
+        TODAY_PREVIEW_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(TODAY_PREVIEW_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Erreur ecriture today_preview.json : {e}")
 
 
 def list_pending_videos() -> list[Path]:
@@ -103,20 +127,45 @@ def run_daily_publication(
     custom_hook: str | None = None,
     custom_description: str | None = None,
     custom_hashtags: list[str] | None = None,
+    force_publish: bool = False,
     progress_callback=None,
 ) -> dict:
     """
-    Executes the full automated workflow:
-    1. Generates the daily story with opening hours
-    2. Picks a video from queue (or recycled archive) and reuses pre-approved texts or analyzes it with Gemini
-    3. Burns the hook onto the video
-    4. Posts to Instagram & TikTok (or simulates)
-    5. Archives the used video (rotation)
-    6. Saves history
+    Executes the full automated publication workflow:
+    1. Verifie le verrou anti-doublon (empeche de republier si deja effectue aujourd'hui).
+    2. Recupere l'apercu verrouille a 00h01 (ou genere si absent).
+    3. Utilise la video selectionnee et deja pre-encodee la nuit (gain de temps et 0 bug).
+    4. Publie la Story 15s avec musique et le Reel (sans fond noir).
+    5. Archive la video brute et met a jour today_preview.json.
     """
     now = datetime.datetime.now()
     timestamp_str = now.strftime("%Y-%m-%d_%H-%M-%S")
     date_str = now.strftime("%Y-%m-%d")
+
+    # Anti-doublon check:
+    today_preview = get_today_preview()
+    is_already_published = False
+    if today_preview and today_preview.get("date") == date_str and today_preview.get("is_published"):
+        is_already_published = True
+
+    if not is_simulation:
+        history = load_history()
+        for h in history:
+            if h.get("date") == date_str and h.get("status") == "success" and not h.get("is_simulation"):
+                is_already_published = True
+                break
+
+    if is_already_published and not force_publish:
+        msg = f"La publication du {date_str} a deja ete effectuee aujourd'hui. Aucune republication pour eviter les doublons."
+        print(f"[{timestamp_str}] {msg}")
+        if progress_callback:
+            progress_callback(msg, 100)
+        return {
+            "id": f"pub_{timestamp_str}",
+            "status": "already_published",
+            "message": msg,
+            "date": date_str,
+        }
 
     report = {
         "id": f"pub_{timestamp_str}",
@@ -131,29 +180,26 @@ def run_daily_publication(
     }
 
     try:
-        # Step 1: Generate Story (Image + 15s MP4 Video with Day Audio)
-        if progress_callback:
-            progress_callback("Génération de la story (Horaires + Audio 15s)...", 15)
-        print(f"[{timestamp_str}] Étape 1 : Génération de la story quotidienne...")
-        story_res = generate_daily_story(
-            output_filename=f"story_{date_str}.png"
-        )
-        try:
-            story_video_path = create_story_video(
-                image_path=Path(story_res["output_path"]),
-                target_date=now.date(),
-                duration=15,
-                output_filename=f"story_{date_str}.mp4",
-            )
-            story_res["video_path"] = str(story_video_path)
-        except Exception as e_vid:
-            print(f"Avertissement : rendu vidéo story non disponible ({e_vid}), repli sur image statique.")
+        # Step 1: Ensure today's preview & story exist
+        story_vid_path = PROCESSED_STORIES_DIR / f"story_{date_str}.mp4"
+        story_img_path = PROCESSED_STORIES_DIR / f"story_{date_str}.png"
+        if not today_preview or today_preview.get("date") != date_str or not story_vid_path.exists():
+            if progress_callback:
+                progress_callback("Preparation et verrouillage de l'apercu du jour...", 15)
+            today_preview = generate_daily_preview(target_date=now.date())
+
+        story_res = {
+            "status": "success",
+            "output_path": str(story_img_path),
+            "video_path": str(story_vid_path) if story_vid_path.exists() else str(story_img_path),
+            "date": date_str,
+        }
         report["story"] = story_res
 
-        # Step 2: Pick Video with Rotation & Archive fallback
+        # Step 2: Select the locked Video
         if progress_callback:
-            progress_callback("Sélection de la vidéo...", 30)
-        print(f"[{timestamp_str}] Étape 2 : Sélection de la vidéo...")
+            progress_callback("Selection de la video verrouillee...", 30)
+        print(f"[{timestamp_str}] Etape 2 : Selection de la video verrouillee...")
         pending_videos = list_pending_videos()
         selected_video = None
         is_recycled = False
@@ -164,108 +210,106 @@ def run_daily_publication(
                     selected_video = v
                     break
 
+        if not selected_video and today_preview and today_preview.get("video_name"):
+            target_name = today_preview["video_name"]
+            for v in pending_videos:
+                if v.name == target_name:
+                    selected_video = v
+                    break
+            if not selected_video:
+                for v in list_archived_videos():
+                    if v.name == target_name:
+                        selected_video = v
+                        is_recycled = True
+                        break
+
         if not selected_video:
             if pending_videos:
-                # FIFO: take the oldest uploaded video
                 selected_video = pending_videos[0]
             else:
-                # Fallback: Recycle the oldest archived video so publication never fails silently
                 archived = list_archived_videos()
                 if archived:
                     selected_video = archived[0]
                     is_recycled = True
-                    print(f"File d'attente vide : recyclage de la vidéo archivée {selected_video.name}")
                 else:
-                    raise FileNotFoundError(
-                        f"Aucune vidéo trouvée dans {UPLOADS_VIDEOS_DIR} ni dans {ARCHIVE_VIDEOS_DIR}. "
-                        "Veuillez déposer au moins une vidéo."
-                    )
+                    raise FileNotFoundError("Aucune video trouvee dans uploads/videos ni dans archive.")
 
         report["raw_video"] = str(selected_video.name)
         report["recycled_from_archive"] = is_recycled
 
-        # Step 3: AI Analysis / Pre-approved Text (Hook, Description, Hashtags)
+        # Step 3: Texts (Hook, Description, Hashtags)
         ai_data = None
-
+        need_reencode = False
         if custom_hook and custom_description:
-            # 1. Use texts validated by user from web preview (bypasses Gemini, saves tokens)
             if progress_callback:
-                progress_callback("Utilisation des textes validés en prévisualisation...", 50)
-            print(f"[{timestamp_str}] Étape 3 : Réutilisation des textes validés (aucun appel Gemini, 0 token consommé)...")
-            hashtags_list = custom_hashtags if custom_hashtags else ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"]
+                progress_callback("Utilisation des textes personnalises...", 50)
             hook_text = custom_hook
             caption_line = custom_description
+            hashtags_list = custom_hashtags if custom_hashtags else ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"]
             ai_data = {
                 "hook": hook_text,
                 "description": caption_line,
                 "hashtags": hashtags_list,
-                "source": "pre_approved_preview",
+                "source": "custom_override",
             }
+            need_reencode = True
         else:
-            # 2. Check if cached analysis exists for this video
-            cache_file = BASE_DIR / "data" / "last_ai_analysis.json"
-            cached = None
-            if cache_file.exists():
-                try:
-                    with open(cache_file, "r", encoding="utf-8") as f:
-                        cached_data = json.load(f)
-                        if cached_data.get("video_name") == selected_video.name and "analysis" in cached_data:
-                            cached = cached_data["analysis"]
-                except Exception as e:
-                    print(f"Erreur lecture cache IA : {e}")
-
-            if cached and cached.get("hook") and cached.get("description"):
-                if progress_callback:
-                    progress_callback("Réutilisation de l'analyse IA en cache...", 50)
-                print(f"[{timestamp_str}] Étape 3 : Analyse trouvée en cache pour {selected_video.name} (0 token consommé)...")
-                ai_data = cached
-                hook_text = ai_data["hook"]
-                caption_line = ai_data["description"]
-                hashtags_list = ai_data.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
-            else:
-                # 3. Fresh analysis via Gemini
-                if progress_callback:
-                    progress_callback("Analyse IA multimodale (Gemini)...", 50)
-                print(f"[{timestamp_str}] Étape 3 : Analyse IA de la vidéo via Gemini...")
-                ai_data = analyze_video_with_gemini(selected_video)
-                hook_text = ai_data.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !")
-                caption_line = ai_data.get("description", "Rejoignez-nous chez BCHEF Bourges au 13 place Gordaine !")
-                hashtags_list = ai_data.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
-
-                # Save cache for reuse
-                try:
-                    cache_file.parent.mkdir(parents=True, exist_ok=True)
-                    with open(cache_file, "w", encoding="utf-8") as f:
-                        json.dump({"video_name": selected_video.name, "analysis": ai_data}, f, ensure_ascii=False, indent=2)
-                except Exception as e_cache:
-                    print(f"Erreur écriture cache IA : {e_cache}")
+            if progress_callback:
+                progress_callback("Reutilisation des textes verrouilles a minuit...", 50)
+            hook_text = today_preview.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !")
+            caption_line = today_preview.get("description", "Rejoignez-nous chez BCHEF Bourges au 13 place Gordaine !")
+            hashtags_list = today_preview.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
+            ai_data = {
+                "hook": hook_text,
+                "description": caption_line,
+                "hashtags": hashtags_list,
+                "transcription": today_preview.get("transcription", ""),
+                "contexte": today_preview.get("contexte", ""),
+                "source": "today_preview_locked",
+            }
 
         report["ai_analysis"] = ai_data
         full_caption = f"{caption_line}\n\n{' '.join(hashtags_list)}"
 
-        # Step 4: Video Processing (Burn hook)
-        if progress_callback:
-            progress_callback("Incrustation du Hook vidéo (FFmpeg)...", 75)
-        print(f"[{timestamp_str}] Étape 4 : Incrustation du Hook sur la vidéo...")
-        video_res = process_video_with_hook(
-            input_video=selected_video,
-            hook_text=hook_text,
-            output_filename=f"video_{date_str}_{selected_video.stem}.mp4",
-        )
+        # Step 4: Video Processing (Reuse Pre-encoded or Re-encode)
+        expected_video_file = f"video_{date_str}_{selected_video.stem}.mp4"
+        expected_video_path = PROCESSED_VIDEOS_DIR / expected_video_file
+        expected_cover_path = PROCESSED_VIDEOS_DIR / f"{expected_video_path.stem}_cover.jpg"
+
+        if not need_reencode and expected_video_path.exists() and expected_cover_path.exists():
+            if progress_callback:
+                progress_callback("Reutilisation de la video deja encodee a minuit...", 75)
+            print(f"[{timestamp_str}] Etape 4 : Video deja encodee a minuit disponible ({expected_video_file}), saut de l'encodage...")
+            video_res = {
+                "status": "success",
+                "input_video": str(selected_video.name),
+                "output_video": str(expected_video_path),
+                "cover_image": str(expected_cover_path),
+                "hook_text": hook_text,
+            }
+        else:
+            if progress_callback:
+                progress_callback("Incrustation du Hook video (FFmpeg)...", 75)
+            print(f"[{timestamp_str}] Etape 4 : Incrustation du Hook sur la video...")
+            video_res = process_video_with_hook(
+                input_video=selected_video,
+                hook_text=hook_text,
+                output_filename=expected_video_file,
+            )
         report["video"] = video_res
 
         # Step 5: Publications
         if progress_callback:
             progress_callback("Publication Instagram & TikTok...", 90)
-        print(f"[{timestamp_str}] Étape 5 : Publications...")
+        print(f"[{timestamp_str}] Etape 5 : Publications...")
         insta = InstagramPublisher()
         tiktok = TikTokPublisher()
 
-        # Story Instagram (Publiée en vidéo 15s avec l'audio du jour, ou repli image)
+        # Story Instagram (vidéo 15s avec l'audio du jour)
         story_to_publish = (
-            Path(story_res["video_path"])
-            if story_res.get("video_path") and Path(story_res["video_path"]).exists()
-            else Path(story_res["output_path"])
+            story_vid_path
+            if story_vid_path.exists()
+            else story_img_path
         )
         insta_story_res = insta.publish_story(
             media_path=story_to_publish,
@@ -273,13 +317,13 @@ def run_daily_publication(
         )
         report["publications"].append(insta_story_res)
 
-        # Reel Instagram (avec lieu BCHEF Bourges et partage direct en Story)
+        # Reel Instagram (avec lieu BCHEF Bourges - SANS repartage en story pour eviter le fond noir)
         insta_reel_res = insta.publish_reel(
             video_path=Path(video_res["output_video"]),
             caption=full_caption,
             cover_path=Path(video_res["cover_image"]),
             simulation=is_simulation,
-            share_to_story=True,
+            share_to_story=False,
         )
         report["publications"].append(insta_reel_res)
 
@@ -290,11 +334,14 @@ def run_daily_publication(
             simulation=is_simulation,
             location_query="BCHEF Bourges",
         )
+        report["publications"].append(tiktok_res)
+
         # Step 6: Rotation & Archivage de la video
-        if not is_simulation:
+        any_published_ok = any(p.get("status") == "published" for p in report["publications"])
+        if not is_simulation and any_published_ok:
             if progress_callback:
-                progress_callback("Rotation et archivage de la vidéo...", 98)
-            print(f"[{timestamp_str}] Étape 6 : Rotation et archivage de la vidéo...")
+                progress_callback("Rotation et archivage de la video...", 98)
+            print(f"[{timestamp_str}] Etape 6 : Rotation et archivage de la video...")
             if not is_recycled:
                 ARCHIVE_VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
                 dest_name = f"{date_str}_{selected_video.name}"
@@ -304,16 +351,26 @@ def run_daily_publication(
                     dest_path = ARCHIVE_VIDEOS_DIR / dest_name
                 shutil.move(str(selected_video), str(dest_path))
                 report["archived_video"] = dest_name
-                print(f"[{timestamp_str}] Vidéo archivée avec succès : {dest_name}")
+                print(f"[{timestamp_str}] Video archivee avec succes : {dest_name}")
             else:
                 selected_video.touch()
                 report["archived_video"] = selected_video.name
-                print(f"[{timestamp_str}] Vidéo recyclée décalée en fin de cycle de rotation : {selected_video.name}")
+                print(f"[{timestamp_str}] Video recyclee decalee en fin de cycle : {selected_video.name}")
 
-        report["status"] = "success"
+            # Marquer l'apercu du jour comme publie
+            if today_preview:
+                today_preview["is_published"] = True
+                today_preview["published_at"] = now.isoformat()
+                today_preview["publications"] = report["publications"]
+                today_preview["report"] = report
+                save_today_preview(today_preview)
+        elif not is_simulation and not any_published_ok:
+            print(f"[{timestamp_str}] Avertissement : Aucune publication n'a reussi en production. La video n'est pas archivee.")
+
+        report["status"] = "success" if (is_simulation or any_published_ok) else "error"
         if progress_callback:
-            progress_callback("Publication terminée avec succès !", 100)
-        print(f"[{timestamp_str}] Publication terminée avec succès !")
+            progress_callback("Publication terminee avec succes !" if report["status"] == "success" else "Echec de la publication.", 100 if report["status"] == "success" else -1)
+        print(f"[{timestamp_str}] Publication terminee (status={report['status']})")
 
     except Exception as e:
         report["status"] = "error"
@@ -326,57 +383,125 @@ def run_daily_publication(
     return report
 
 
-def generate_daily_preview():
+def generate_daily_preview(target_date: datetime.date | None = None, force: bool = False) -> dict:
     """
-    Runs automatically every night at 00:01 to prepare the day's preview.
-    Pre-renders the story image + 15s video with today's audio, and analyzes the upcoming video with Gemini.
-    Ensures that when the manager opens the dashboard in the morning, today's preview is already 100% ready.
+    S'execute automatiquement chaque nuit a 00:01 pour preparer et verrouiller l'apercu du jour :
+    1. Pre-genere l'image de la story + video 15s avec l'audio du jour.
+    2. Selectionne la video du jour dans la file d'attente (ou recycle une archive).
+    3. Lance l'analyse multimodale Gemini (transcription, contexte, hook, description, hashtags).
+    4. PRE-INCRUSTE LE HOOK SUR LA VIDEO DES 00h01 (FFmpeg).
+    5. Sauvegarde le contrat journalier dans data/today_preview.json.
+    Assure qu'au reveil du gerant, la video est DEJA montee et prete a diffuser.
     """
     now = datetime.datetime.now()
-    date_str = now.strftime("%Y-%m-%d")
-    print(f"[{date_str} 00:01] Pré-génération automatique de l'aperçu du jour...")
+    target = target_date or now.date()
+    date_str = target.strftime("%Y-%m-%d")
+    print(f"[{date_str} 00:01] Pre-generation automatique de l'apercu du jour...")
+
+    cached_preview = get_today_preview()
+    if cached_preview and cached_preview.get("date") == date_str and not force:
+        proc_v = PROCESSED_VIDEOS_DIR / cached_preview.get("processed_video", "")
+        if proc_v.exists():
+            print(f"[{date_str}] Apercu du jour deja existant et valide dans today_preview.json.")
+            return cached_preview
 
     # 1. Pre-generate today's story image + 15s MP4 video with daily audio
+    story_img_name = f"story_{date_str}.png"
+    story_vid_name = f"story_{date_str}.mp4"
     try:
-        story_res = generate_daily_story(output_filename=f"story_{date_str}.png")
+        story_res = generate_daily_story(target_date=target, output_filename=story_img_name)
         create_story_video(
             image_path=Path(story_res["output_path"]),
-            target_date=now.date(),
+            target_date=target,
             duration=15,
-            output_filename=f"story_{date_str}.mp4",
+            output_filename=story_vid_name,
         )
-        print(f"[{date_str}] Story vidéo 15s pré-générée pour la journée.")
+        print(f"[{date_str}] Story video 15s pre-generee pour la journee.")
     except Exception as e_story:
-        print(f"Erreur pré-génération story : {e_story}")
+        print(f"Erreur pre-generation story : {e_story}")
 
-    # 2. Pick next video in queue and prepare Gemini analysis in cache
-    try:
-        pending = list_pending_videos()
-        video_to_analyze = pending[0] if pending else None
-        if not video_to_analyze:
-            archived = list_archived_videos()
-            video_to_analyze = archived[0] if archived else None
+    # 2. Select the video of the day
+    pending = list_pending_videos()
+    video_to_process = None
+    is_recycled = False
+    if pending:
+        video_to_process = pending[0]
+    else:
+        archived = list_archived_videos()
+        if archived:
+            video_to_process = archived[0]
+            is_recycled = True
+            print(f"File d'attente vide : recyclage de la video archivee {video_to_process.name}")
+        else:
+            print("Aucune video disponible pour la pre-generation.")
+            return {}
 
-        if video_to_analyze:
-            cache_file = BASE_DIR / "data" / "last_ai_analysis.json"
-            cached = None
-            if cache_file.exists():
-                try:
-                    with open(cache_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        if data.get("video_name") == video_to_analyze.name:
-                            cached = data.get("analysis")
-                except Exception:
-                    pass
-            if not cached:
-                print(f"[{date_str}] Pré-analyse Gemini de la vidéo {video_to_analyze.name}...")
-                ai_data = analyze_video_with_gemini(video_to_analyze)
-                cache_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(cache_file, "w", encoding="utf-8") as f:
-                    json.dump({"video_name": video_to_analyze.name, "analysis": ai_data}, f, ensure_ascii=False, indent=2)
-                print(f"[{date_str}] Accroche, description et hashtags pré-générés et mis en cache.")
-    except Exception as e_ai:
-        print(f"Erreur pré-analyse IA : {e_ai}")
+    # 3. Gemini AI Analysis
+    ai_data = None
+    cache_file = BASE_DIR / "data" / "last_ai_analysis.json"
+    if not force and cache_file.exists():
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cdata = json.load(f)
+                if cdata.get("video_name") == video_to_process.name and "analysis" in cdata:
+                    ai_data = cdata["analysis"]
+        except Exception:
+            pass
+
+    if not ai_data:
+        print(f"[{date_str}] Analyse IA Gemini de la video {video_to_process.name}...")
+        ai_data = analyze_video_with_gemini(video_to_process)
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump({"video_name": video_to_process.name, "analysis": ai_data}, f, ensure_ascii=False, indent=2)
+        except Exception as e_cache:
+            print(f"Erreur sauvegarde cache IA : {e_cache}")
+
+    hook_text = ai_data.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !")
+    caption_line = ai_data.get("description", "Rejoignez-nous chez BCHEF Bourges au 13 place Gordaine !")
+    hashtags_list = ai_data.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
+
+    # 4. Burn the hook overlay onto the video NOW at 00h01
+    output_video_name = f"video_{date_str}_{video_to_process.stem}.mp4"
+    print(f"[{date_str}] Pre-incrustation de l'accroche sur {video_to_process.name} -> {output_video_name}...")
+    video_res = process_video_with_hook(
+        input_video=video_to_process,
+        hook_text=hook_text,
+        output_filename=output_video_name,
+    )
+    cover_image_name = Path(video_res["cover_image"]).name
+
+    # Verifier si aujourd'hui a deja ete publie dans l'historique
+    history = load_history()
+    is_already_published = False
+    for h in history:
+        if h.get("date") == date_str and h.get("status") == "success" and not h.get("is_simulation"):
+            is_already_published = True
+            break
+
+    # 5. Save into data/today_preview.json
+    preview_data = {
+        "date": date_str,
+        "video_name": video_to_process.name,
+        "is_recycled": is_recycled,
+        "hook": hook_text,
+        "description": caption_line,
+        "hashtags": hashtags_list,
+        "transcription": ai_data.get("transcription", ""),
+        "contexte": ai_data.get("contexte", ""),
+        "story_image": story_img_name,
+        "story_video": story_vid_name,
+        "processed_video": output_video_name,
+        "cover_image": cover_image_name,
+        "is_published": is_already_published,
+        "published_at": now.isoformat() if is_already_published else None,
+        "publications": [],
+    }
+    save_today_preview(preview_data)
+    print(f"[{date_str}] Apercu et video du jour verrouilles avec succes dans today_preview.json.")
+    return preview_data
+
 
 
 scheduler = BackgroundScheduler()
@@ -385,19 +510,19 @@ scheduler = BackgroundScheduler()
 def start_scheduler():
     """Starts the daily 00:01 preview preparation and 11:30 publication schedule."""
     if not scheduler.running:
-        # 1. Preview preparation every night at 00:01
+        # 1. Preview preparation every night at 00:01 Paris time
         scheduler.add_job(
             func=generate_daily_preview,
-            trigger=CronTrigger(hour=0, minute=1),
+            trigger=CronTrigger(hour=0, minute=1, timezone="Europe/Paris"),
             id="daily_bchef_preview",
             name="Pré-génération quotidienne de l'aperçu BCHEF",
             replace_existing=True,
         )
 
-        # 2. Daily publication at 11:30
+        # 2. Daily publication at 11:30 Paris time
         scheduler.add_job(
             func=run_daily_publication,
-            trigger=CronTrigger(hour=11, minute=30),
+            trigger=CronTrigger(hour=11, minute=30, timezone="Europe/Paris"),
             id="daily_bchef_publication",
             name="Publication quotidienne BCHEF Bourges",
             replace_existing=True,
@@ -405,8 +530,8 @@ def start_scheduler():
         )
         scheduler.start()
         print("Planificateur activé :")
-        print(" - Pré-génération de l'aperçu du jour chaque nuit à 00h01.")
-        print(" - Publication automatique chaque jour à 11h30.")
+        print(" - Pré-génération de l'aperçu du jour chaque nuit à 00h01 (Paris).")
+        print(" - Publication automatique chaque jour à 11h30 (Paris).")
 
 
 if __name__ == "__main__":

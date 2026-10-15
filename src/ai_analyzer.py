@@ -77,7 +77,7 @@ def analyze_video_with_gemini(video_path: Path, api_key: str | None = None) -> d
             "}"
         )
 
-        candidate_models = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"]
+        candidate_models = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"]
         data = None
         last_error = None
 

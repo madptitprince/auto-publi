@@ -39,7 +39,11 @@ from src.scheduler import (
     archive_video_file,
     restore_video_file,
     delete_archived_file,
+    get_today_preview,
+    save_today_preview,
+    generate_daily_preview,
 )
+from src.video_processor import process_video_with_hook
 from src.story_generator import list_story_templates, get_today_hours, generate_daily_story
 from src.ai_analyzer import analyze_video_with_gemini
 
@@ -199,35 +203,53 @@ async def dashboard(request: Request):
         for d in DAYS_ORDER
     ]
 
-    # Latest processed assets
-    latest_story = None
-    story_files = sorted(PROCESSED_STORIES_DIR.glob("*.png"), key=os.path.getmtime, reverse=True)
-    if story_files:
-        latest_story = story_files[0].name
+    # Chargement du contrat de prévisualisation du jour
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    today_preview = get_today_preview()
 
-    latest_story_video = None
-    story_video_files = sorted(PROCESSED_STORIES_DIR.glob("*.mp4"), key=os.path.getmtime, reverse=True)
-    if story_video_files:
-        latest_story_video = story_video_files[0].name
-
-    latest_video = None
-    video_files = sorted(PROCESSED_VIDEOS_DIR.glob("*.mp4"), key=os.path.getmtime, reverse=True)
-    if video_files:
-        latest_video = video_files[0].name
-
-    latest_report = history[0] if history else None
-    cache_ai_file = BASE_DIR / "data" / "last_ai_analysis.json"
-    if (not latest_report or not latest_report.get("ai_analysis")) and cache_ai_file.exists():
+    # Si l'aperçu du jour n'a pas encore été généré pour aujourd'hui, le préparer
+    if not today_preview or today_preview.get("date") != today_str:
         try:
-            with open(cache_ai_file, "r", encoding="utf-8") as f:
-                cdata = json.load(f)
-                if cdata.get("analysis"):
-                    if not latest_report:
-                        latest_report = {"ai_analysis": cdata["analysis"]}
-                    else:
-                        latest_report["ai_analysis"] = cdata["analysis"]
-        except Exception:
-            pass
+            today_preview = generate_daily_preview()
+        except Exception as e_prev:
+            print(f"Erreur préparation aperçu aujourd'hui : {e_prev}")
+
+    latest_story = None
+    latest_story_video = None
+    latest_video = None
+    is_today_published = False
+
+    if today_preview and today_preview.get("date") == today_str:
+        latest_story = today_preview.get("story_image")
+        latest_story_video = today_preview.get("story_video")
+        latest_video = today_preview.get("processed_video")
+        latest_report = {"ai_analysis": today_preview}
+        is_today_published = today_preview.get("is_published", False)
+
+    if not is_today_published:
+        for h in history:
+            if h.get("date") == today_str and h.get("status") == "success" and not h.get("is_simulation"):
+                is_today_published = True
+                if today_preview:
+                    today_preview["is_published"] = True
+                    save_today_preview(today_preview)
+                break
+    else:
+        # Repli fichiers
+        story_files = sorted(PROCESSED_STORIES_DIR.glob("*.png"), key=os.path.getmtime, reverse=True)
+        if story_files:
+            latest_story = story_files[0].name
+
+        story_video_files = sorted(PROCESSED_STORIES_DIR.glob("*.mp4"), key=os.path.getmtime, reverse=True)
+        if story_video_files:
+            latest_story_video = story_video_files[0].name
+
+        video_files = sorted(PROCESSED_VIDEOS_DIR.glob("*.mp4"), key=os.path.getmtime, reverse=True)
+        if video_files:
+            latest_video = video_files[0].name
+
+        latest_report = history[0] if history else None
+
     has_gemini_key = bool(os.getenv("GEMINI_API_KEY"))
 
     # Next run calculation
@@ -253,6 +275,7 @@ async def dashboard(request: Request):
             "instagram_user": os.getenv("INSTAGRAM_USERNAME", ""),
             "has_tiktok": (BASE_DIR / "data" / "tiktok_cookies.json").exists(),
             "auth_user": getattr(request.state, "user", "admin"),
+            "is_today_published": is_today_published,
         },
     )
 
@@ -346,6 +369,7 @@ async def trigger_publish(
     hook: str = Form(None),
     description: str = Form(None),
     hashtags: str = Form(None),
+    force: bool = Form(False),
 ):
     global publication_status
     if publication_status["is_running"]:
@@ -382,6 +406,7 @@ async def trigger_publish(
         c_hook: str | None,
         c_desc: str | None,
         c_tags: list[str] | None,
+        is_force: bool,
     ):
         global publication_status
 
@@ -407,6 +432,7 @@ async def trigger_publish(
                 custom_hook=c_hook.strip() if c_hook and c_hook.strip() else None,
                 custom_description=c_desc.strip() if c_desc and c_desc.strip() else None,
                 custom_hashtags=c_tags,
+                force_publish=is_force,
                 progress_callback=progress_cb,
             )
             publication_status["report"] = res
@@ -414,6 +440,10 @@ async def trigger_publish(
                 publication_status["status"] = "success"
                 publication_status["percent"] = 100
                 publication_status["step"] = "Publication terminee avec succes !"
+            elif res.get("status") == "already_published":
+                publication_status["status"] = "already_published"
+                publication_status["percent"] = 100
+                publication_status["step"] = res.get("message", "Publication deja effectuee aujourd'hui.")
             else:
                 publication_status["status"] = "error"
                 publication_status["error"] = res.get("error", "Erreur inconnue")
@@ -425,12 +455,13 @@ async def trigger_publish(
 
     thread = threading.Thread(
         target=background_worker,
-        args=(simulation, video_name, hook, description, parsed_tags),
+        args=(simulation, video_name, hook, description, parsed_tags, force),
         daemon=True,
     )
     thread.start()
 
     return {"status": "started", "message": "Pipeline de publication lance en arriere-plan."}
+
 
 
 @app.get("/api/trigger/status")
@@ -441,28 +472,15 @@ async def get_trigger_status():
 
 @app.post("/api/ai/regenerate")
 async def regenerate_ai(video_name: str = Form(None)):
-    pending = list_pending_videos()
-    target_video = None
-    if video_name:
-        for v in pending:
-            if v.name == video_name:
-                target_video = v
-                break
-    if not target_video and pending:
-        target_video = pending[0]
-
-    if not target_video:
-        raise HTTPException(status_code=400, detail="Aucune vidéo disponible pour l'analyse.")
-
-    analysis = analyze_video_with_gemini(target_video)
-    cache_path = BASE_DIR / "data" / "last_ai_analysis.json"
     try:
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(cache_path, "w", encoding="utf-8") as f:
-            json.dump({"video_name": target_video.name, "analysis": analysis}, f, ensure_ascii=False, indent=2)
+        updated_preview = generate_daily_preview(force=True)
+        return {
+            "status": "success",
+            "analysis": updated_preview,
+            "preview_video": updated_preview.get("processed_video"),
+        }
     except Exception as e:
-        print(f"Erreur sauvegarde cache IA : {e}")
-    return {"status": "success", "analysis": analysis}
+        raise HTTPException(status_code=500, detail=f"Erreur regeneration apercu IA : {e}")
 
 
 @app.post("/api/settings/hours")

@@ -4,14 +4,23 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
+from src.config import INSTAGRAM_SESSION_FILE, BASE_DIR
+
 load_dotenv()
 
 
 class InstagramPublisher:
-    def __init__(self, username: str | None = None, password: str | None = None):
+    def __init__(self, username: str | None = None, password: str | None = None, session_file: Path | str | None = None):
         self.username = username or os.getenv("INSTAGRAM_USERNAME")
         self.password = password or os.getenv("INSTAGRAM_PASSWORD")
-        self.session_file = Path("data/instagram_session.json")
+        p = session_file or os.getenv("INSTAGRAM_SESSION_PATH")
+        if p:
+            resolved = Path(p)
+            if not resolved.is_absolute():
+                resolved = BASE_DIR / resolved
+            self.session_file = resolved
+        else:
+            self.session_file = INSTAGRAM_SESSION_FILE
 
     @staticmethod
     def _patch_instagrapi_ffmpeg():
@@ -188,9 +197,9 @@ class InstagramPublisher:
         caption: str,
         cover_path: Path | None = None,
         simulation: bool = True,
-        share_to_story: bool = True,
+        share_to_story: bool = False,
     ) -> dict:
-        """Publishes a video reel with location, then immediately shares the reel to Story."""
+        """Publishes a video reel with location BCHEF Bourges."""
         if not video_path.exists():
             raise FileNotFoundError(f"Vidéo reel introuvable : {video_path}")
 

@@ -169,7 +169,7 @@ def process_video_with_hook(
         )
 
     cmd = [
-        "ffmpeg", "-y",
+        "ffmpeg", "-loglevel", "error", "-y",
         "-i", str(input_video),
         "-i", str(badge_path),
         "-filter_complex", filter_expr,
@@ -190,11 +190,11 @@ def process_video_with_hook(
     if badge_path.exists():
         badge_path.unlink()
 
-    # Generate a cover thumbnail at 2 seconds
+    # Generate a cover thumbnail at 1 second
     cover_path = PROCESSED_VIDEOS_DIR / f"{output_path.stem}_cover.jpg"
     subprocess.run([
-        "ffmpeg", "-y",
-        "-ss", "00:00:02",
+        "ffmpeg", "-loglevel", "error", "-y",
+        "-ss", "00:00:01",
         "-i", str(output_path),
         "-vframes", "1",
         "-q:v", "2",

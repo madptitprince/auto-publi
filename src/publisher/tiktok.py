@@ -4,6 +4,8 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 
+from src.config import TIKTOK_COOKIES_FILE, BASE_DIR
+
 load_dotenv()
 
 try:
@@ -13,8 +15,15 @@ except ImportError:
 
 
 class TikTokPublisher:
-    def __init__(self, cookies_path: str | None = None):
-        self.cookies_path = cookies_path or os.getenv("TIKTOK_COOKIES_PATH", "data/tiktok_cookies.json")
+    def __init__(self, cookies_path: str | Path | None = None):
+        p = cookies_path or os.getenv("TIKTOK_COOKIES_PATH")
+        if p:
+            resolved = Path(p)
+            if not resolved.is_absolute():
+                resolved = BASE_DIR / resolved
+            self.cookies_path = resolved
+        else:
+            self.cookies_path = TIKTOK_COOKIES_FILE
 
     def publish_video(
         self,

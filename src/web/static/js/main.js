@@ -297,7 +297,7 @@ async function saveCredentials() {
 }
 
 async function regenerateAI() {
-  showToast("Analyse multimodale Gemini 3.8 Flash en cours...");
+  showToast("Analyse multimodale Gemini en cours...");
   try {
     const res = await fetch("/api/ai/regenerate", { method: "POST" });
     const data = await res.json();
@@ -312,7 +312,19 @@ async function regenerateAI() {
       if (tagsContainer && a.hashtags) {
         tagsContainer.innerHTML = a.hashtags.map(t => `<span class="tag-item">${t}</span>`).join("");
       }
-      showToast("Nouveaux textes generes par Gemini 3.8 Flash.");
+
+      if (data.preview_video) {
+        const reelPlayer = document.getElementById("reel-preview-player");
+        if (reelPlayer) {
+          const source = reelPlayer.querySelector("source");
+          if (source) {
+            source.src = `/media/processed/videos/${data.preview_video}?t=${Date.now()}`;
+            reelPlayer.load();
+          }
+        }
+      }
+
+      showToast("Nouveaux textes generes et video pre-incrustee.");
     } else {
       showToast(data.detail || "Erreur de generation.", true);
     }
@@ -371,6 +383,10 @@ async function checkAndPollPublicationStatus() {
         updateTriggerButtons(true, "Termine (100%)");
         showToast("Publication executee avec succes.");
         setTimeout(() => location.reload(), 1500);
+      } else if (data.status === "already_published") {
+        updateTriggerButtons(false);
+        showToast(data.step || "Publication deja effectuee aujourd'hui.", false);
+        setTimeout(() => location.reload(), 1500);
       } else if (data.status === "error") {
         updateTriggerButtons(false);
         showToast(data.error || "Erreur lors de la publication.", true);
@@ -417,6 +433,9 @@ async function triggerPublication() {
       if (!publicationPollingInterval) {
         publicationPollingInterval = setInterval(checkAndPollPublicationStatus, 1500);
       }
+    } else if (data.status === "already_published") {
+      showToast(data.message || "Publication deja effectuee aujourd'hui.", false);
+      updateTriggerButtons(false);
     } else {
       showToast(data.message || "Erreur au lancement.", true);
       updateTriggerButtons(false);
