@@ -4,23 +4,35 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-from src.config import INSTAGRAM_SESSION_FILE, BASE_DIR
+from src.config import INSTAGRAM_SESSION_FILE, BASE_DIR, DATA_DIR, get_social_settings
 
 load_dotenv()
 
 
 class InstagramPublisher:
-    def __init__(self, username: str | None = None, password: str | None = None, session_file: Path | str | None = None):
-        self.username = username or os.getenv("INSTAGRAM_USERNAME")
-        self.password = password or os.getenv("INSTAGRAM_PASSWORD")
-        p = session_file or os.getenv("INSTAGRAM_SESSION_PATH")
-        if p:
-            resolved = Path(p)
+    def __init__(
+        self,
+        username: str | None = None,
+        password: str | None = None,
+        session_file: Path | str | None = None,
+        target_profile: str | None = None,
+    ):
+        social_cfg = get_social_settings()
+        active_target = target_profile or social_cfg.get("active_profile", "test")
+        prof = social_cfg["profiles"].get(active_target, social_cfg["profiles"]["test"])
+
+        self.target_profile = active_target
+        self.username = username or prof.get("instagram_username") or os.getenv("INSTAGRAM_USERNAME")
+        self.password = password or prof.get("instagram_password") or os.getenv("INSTAGRAM_PASSWORD")
+
+        if session_file:
+            resolved = Path(session_file)
             if not resolved.is_absolute():
                 resolved = BASE_DIR / resolved
             self.session_file = resolved
         else:
-            self.session_file = INSTAGRAM_SESSION_FILE
+            sess_name = prof.get("instagram_session_file", f"instagram_session_{active_target}.json")
+            self.session_file = DATA_DIR / sess_name
 
     @staticmethod
     def _patch_instagrapi_ffmpeg():

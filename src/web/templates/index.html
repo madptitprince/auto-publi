@@ -102,18 +102,21 @@
               <strong class="chip-val" style="color: var(--brand-orange);">Pret pour 11h30</strong>
               {% endif %}
             </div>
+            <div class="meta-chip">
+              <span class="chip-label">Compte cible</span>
+              {% if active_profile == 'official' %}
+              <strong id="active-target-chip" class="chip-val" style="color: var(--brand-orange);">Officiel ({{ profiles.official.instagram_username }})</strong>
+              {% else %}
+              <strong id="active-target-chip" class="chip-val" style="color: #60a5fa;">Test ({{ profiles.test.instagram_username }})</strong>
+              {% endif %}
+            </div>
 
           </div>
         </div>
         <div class="summary-actions">
-          <label class="toggle-switch-container">
-            <input type="checkbox" id="check-simulation" checked class="toggle-switch-input" onchange="syncSimulationCheckboxes(this)">
-            <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
-            <span class="toggle-switch-label">Mode simulation (Test)</span>
-          </label>
           <button id="btn-trigger" class="btn btn-primary" onclick="triggerPublication()">
             <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            <span>Lancer la publication</span>
+            <span>Publier maintenant</span>
           </button>
         </div>
       </div>
@@ -490,35 +493,100 @@
           <button class="btn btn-secondary btn-sm" onclick="saveCredentials()">Mettre a jour la clef</button>
         </div>
 
-        <!-- Social Media Accounts Card -->
-        <div class="card">
+        <!-- Social Media Profiles Card (Mode Test vs Mode Officiel) -->
+        <div class="card" style="grid-column: span 2;">
           <div class="card-header">
             <h3 class="card-title">
               <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-              <span>Comptes Reseaux Sociaux (Test)</span>
+              <span>Profils de publication Instagram & TikTok</span>
             </h3>
-            <span class="badge badge-blue">Mode Test</span>
+            {% if active_profile == 'official' %}
+            <span class="badge badge-emerald">Mode Officiel Actif (BCHEF)</span>
+            {% else %}
+            <span class="badge badge-blue">Mode Test Actif (Bac a sable)</span>
+            {% endif %}
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Nom d'utilisateur Instagram</label>
-            <input type="text" id="input-insta-user" class="form-input" value="{{ instagram_user }}" placeholder="test_publi00">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+            Choisissez le profil actif pour la publication automatique quotidienne a 11h30 et le bouton de diffusion immediate.
+          </p>
+
+          <!-- Profile Selector Tabs / Radios -->
+          <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
+            <label style="flex: 1; min-width: 260px; padding: 14px 18px; border: 2px solid {% if active_profile == 'test' %}#3b82f6{% else %}var(--border-subtle){% endif %}; border-radius: var(--radius-md); background: {% if active_profile == 'test' %}rgba(59, 130, 246, 0.08){% else %}var(--bg-surface-elevated){% endif %}; cursor: pointer; display: flex; align-items: center; gap: 12px;">
+              <input type="radio" name="radio-profile" value="test" {% if active_profile == 'test' %}checked{% endif %} style="accent-color: #3b82f6; width: 18px; height: 18px;">
+              <div>
+                <strong style="display: block; font-size: 0.92rem; color: var(--text-primary);">Mode Test (Comptes bac a sable)</strong>
+                <span style="font-size: 0.78rem; color: var(--text-secondary);">Pour roder les publications sans toucher aux abonnes BCHEF</span>
+              </div>
+            </label>
+
+            <label style="flex: 1; min-width: 260px; padding: 14px 18px; border: 2px solid {% if active_profile == 'official' %}var(--brand-orange){% else %}var(--border-subtle){% endif %}; border-radius: var(--radius-md); background: {% if active_profile == 'official' %}rgba(227, 82, 5, 0.08){% else %}var(--bg-surface-elevated){% endif %}; cursor: pointer; display: flex; align-items: center; gap: 12px;">
+              <input type="radio" name="radio-profile" value="official" {% if active_profile == 'official' %}checked{% endif %} style="accent-color: var(--brand-orange); width: 18px; height: 18px;">
+              <div>
+                <strong style="display: block; font-size: 0.92rem; color: var(--text-primary);">Mode Officiel (BCHEF Bourges)</strong>
+                <span style="font-size: 0.78rem; color: var(--text-secondary);">Diffusion reelle sur les comptes officiels du restaurant</span>
+              </div>
+            </label>
           </div>
-          <div class="form-group">
-            <label class="form-label">Mot de passe Instagram</label>
-            <input type="password" id="input-insta-pass" class="form-input" placeholder="••••••••">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Session TikTok</label>
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">
-              {% if has_tiktok %}
-              <span class="badge badge-emerald">Session active (data/tiktok_cookies.json)</span>
-              {% else %}
-              <span class="badge badge-rose">Session non configuree (Mode simulation)</span>
-              {% endif %}
+
+          <div class="grid-2col" style="gap: 20px;">
+            <!-- Colonne 1 : Compte Test -->
+            <div style="padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface-elevated);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="font-size: 0.9rem; font-weight: 700; color: #60a5fa;">Configuration Compte Test</h4>
+                <span class="badge badge-blue">test</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Identifiant Instagram Test</label>
+                <input type="text" id="input-insta-test-user" class="form-input" value="{{ profiles.test.instagram_username }}" placeholder="test_publi00">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Mot de passe Instagram Test</label>
+                <input type="password" id="input-insta-test-pass" class="form-input" placeholder="Laisser vide pour conserver">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Session TikTok Test</label>
+                <div style="font-size: 0.8rem; margin-top: 4px;">
+                  {% if has_tiktok_test %}
+                  <span class="badge badge-emerald">Session active (data/tiktok_cookies.json)</span>
+                  {% else %}
+                  <span class="badge badge-rose">Session absente</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <!-- Colonne 2 : Compte Officiel BCHEF -->
+            <div style="padding: 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface-elevated);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--brand-orange);">Configuration Compte Officiel BCHEF</h4>
+                <span class="badge badge-emerald">officiel</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Identifiant Instagram Officiel</label>
+                <input type="text" id="input-insta-official-user" class="form-input" value="{{ profiles.official.instagram_username }}" placeholder="bchef_bourges">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Mot de passe Instagram Officiel</label>
+                <input type="password" id="input-insta-official-pass" class="form-input" placeholder="Renseigner pour le compte officiel...">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Session TikTok Officiel</label>
+                <div style="font-size: 0.8rem; margin-top: 4px;">
+                  {% if has_tiktok_official %}
+                  <span class="badge badge-emerald">Session active (data/tiktok_cookies_official.json)</span>
+                  {% else %}
+                  <span class="badge badge-amber">A deposer : data/tiktok_cookies_official.json</span>
+                  {% endif %}
+                </div>
+              </div>
             </div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="saveCredentials()">Enregistrer les comptes</button>
+
+          <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+            <button class="btn btn-primary" onclick="saveProfileSettings()">Enregistrer et activer ce profil</button>
+          </div>
         </div>
 
         <!-- Dashboard Security Card -->
@@ -595,14 +663,9 @@
 
   <!-- Floating Mobile Action Bar (Sticky at bottom on phones) -->
   <div class="mobile-action-bar">
-    <label class="toggle-switch-container" style="font-size: 0.76rem;">
-      <input type="checkbox" id="check-simulation-mobile" checked class="toggle-switch-input" onchange="syncSimulationCheckboxes(this)">
-      <span class="toggle-switch-track"><span class="toggle-switch-thumb"></span></span>
-      <span class="toggle-switch-label">Simulation</span>
-    </label>
-    <button id="btn-trigger-mobile" class="btn btn-primary" onclick="triggerPublication()" style="flex: 1; min-height: 44px;">
+    <button id="btn-trigger-mobile" class="btn btn-primary" onclick="triggerPublication()" style="width: 100%; min-height: 44px;">
       <svg class="icon-sm icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      <span>Publier</span>
+      <span>Publier maintenant</span>
     </button>
   </div>
 

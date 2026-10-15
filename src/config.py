@@ -96,3 +96,88 @@ def save_opening_hours(hours_dict: dict[str, str]):
     data["opening_hours"] = hours_dict
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+DEFAULT_PROFILES = {
+    "test": {
+        "name": "Mode Test (Compte bac a sable)",
+        "instagram_username": "test_publi00",
+        "instagram_password": "",
+        "instagram_session_file": "instagram_session.json",
+        "tiktok_cookies_file": "tiktok_cookies.json",
+    },
+    "official": {
+        "name": "Mode Officiel (BCHEF Bourges)",
+        "instagram_username": "bchef_bourges",
+        "instagram_password": "",
+        "instagram_session_file": "instagram_session_official.json",
+        "tiktok_cookies_file": "tiktok_cookies_official.json",
+    },
+}
+
+
+def get_social_settings() -> dict:
+    """Retrieves publication profiles and active target (test or official)."""
+    data = {}
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+
+    active_profile = data.get("active_profile", "test")
+    if active_profile not in ("test", "official"):
+        active_profile = "test"
+
+    saved_profiles = data.get("profiles", {})
+    profiles = {}
+    for key, defaults in DEFAULT_PROFILES.items():
+        p = defaults.copy()
+        if key in saved_profiles:
+            p.update({k: v for k, v in saved_profiles[key].items() if v is not None})
+        profiles[key] = p
+
+    if not profiles["test"].get("instagram_password"):
+        profiles["test"]["instagram_password"] = os.getenv("INSTAGRAM_PASSWORD", "mad1234")
+    if not profiles["test"].get("instagram_username"):
+        profiles["test"]["instagram_username"] = os.getenv("INSTAGRAM_USERNAME", "test_publi00")
+
+    if not profiles["official"].get("instagram_password"):
+        env_official_pass = os.getenv("OFFICIAL_INSTAGRAM_PASSWORD", "")
+        if env_official_pass:
+            profiles["official"]["instagram_password"] = env_official_pass
+    if not profiles["official"].get("instagram_username"):
+        profiles["official"]["instagram_username"] = os.getenv("OFFICIAL_INSTAGRAM_USERNAME", "bchef_bourges")
+
+    return {
+        "active_profile": active_profile,
+        "profiles": profiles,
+    }
+
+
+def save_social_settings(active_profile: str, profiles_dict: dict | None = None):
+    """Saves active target profile and optional credential updates."""
+    data = {}
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+
+    if active_profile in ("test", "official"):
+        data["active_profile"] = active_profile
+
+    if profiles_dict:
+        if "profiles" not in data:
+            data["profiles"] = {}
+        for p_key, p_vals in profiles_dict.items():
+            if p_key not in data["profiles"]:
+                data["profiles"][p_key] = {}
+            for k, v in p_vals.items():
+                if v is not None and v != "":
+                    data["profiles"][p_key][k] = v
+
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)

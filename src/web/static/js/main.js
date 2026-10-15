@@ -23,12 +23,45 @@ function switchTab(tabId, btn) {
   }
 }
 
-function syncSimulationCheckboxes(source) {
-  const desktopBox = document.getElementById("check-simulation");
-  const mobileBox = document.getElementById("check-simulation-mobile");
-  if (desktopBox) desktopBox.checked = source.checked;
-  if (mobileBox) mobileBox.checked = source.checked;
+async function saveProfileSettings() {
+  const selectedRadio = document.querySelector('input[name="radio-profile"]:checked');
+  const activeProfile = selectedRadio ? selectedRadio.value : "test";
+
+  const testUser = document.getElementById("input-insta-test-user")?.value.trim() || "";
+  const testPass = document.getElementById("input-insta-test-pass")?.value.trim() || "";
+  const officialUser = document.getElementById("input-insta-official-user")?.value.trim() || "";
+  const officialPass = document.getElementById("input-insta-official-pass")?.value.trim() || "";
+
+  const formData = new FormData();
+  formData.append("active_profile", activeProfile);
+  if (testUser) formData.append("test_insta_user", testUser);
+  if (testPass) formData.append("test_insta_pass", testPass);
+  if (officialUser) formData.append("official_insta_user", officialUser);
+  if (officialPass) formData.append("official_insta_pass", officialPass);
+
+  showToast("Enregistrement du profil social...");
+  try {
+    const res = await fetch("/api/settings/profile", {
+      method: "POST",
+      body: formData,
+    });
+    if (res.status === 401) {
+      showToast("Session expiree. Reconnexion requise...", true);
+      setTimeout(() => location.href = "/login", 1200);
+      return;
+    }
+    const data = await res.json();
+    if (data.status === "success") {
+      showToast(data.message || "Profil enregistre avec succes.");
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.detail || "Erreur lors de l'enregistrement.", true);
+    }
+  } catch (err) {
+    showToast("Erreur de communication avec le serveur.", true);
+  }
 }
+
 
 
 function copyContent(elementId) {
@@ -351,11 +384,11 @@ function updateTriggerButtons(loading, labelText = "") {
   } else {
     if (btnDesktop) {
       btnDesktop.disabled = false;
-      btnDesktop.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Lancer la publication</span>`;
+      btnDesktop.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Publier maintenant</span>`;
     }
     if (btnMobile) {
       btnMobile.disabled = false;
-      btnMobile.innerHTML = `<svg class="icon-sm icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Publier</span>`;
+      btnMobile.innerHTML = `<svg class="icon-sm icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Publier maintenant</span>`;
     }
   }
 }
@@ -398,7 +431,12 @@ async function checkAndPollPublicationStatus() {
 }
 
 async function triggerPublication() {
-  const isSim = document.getElementById("check-simulation")?.checked ?? true;
+  const targetChip = document.getElementById("active-target-chip");
+  const targetName = targetChip ? targetChip.innerText.trim() : "le profil actif";
+  if (!confirm(`Confirmer la publication immediate sur ${targetName} ?`)) {
+    return;
+  }
+
   const hookInput = document.getElementById("hook-input");
   const descInput = document.getElementById("desc-input");
   const hookVal = hookInput ? hookInput.value.trim() : "";
@@ -412,7 +450,7 @@ async function triggerPublication() {
 
   try {
     const formData = new FormData();
-    formData.append("simulation", isSim ? "true" : "false");
+    formData.append("simulation", "false");
     if (hookVal) formData.append("hook", hookVal);
     if (descVal) formData.append("description", descVal);
     if (tags.length > 0) formData.append("hashtags", JSON.stringify(tags));

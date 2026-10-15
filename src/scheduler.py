@@ -299,11 +299,12 @@ def run_daily_publication(
         report["video"] = video_res
 
         # Step 5: Publications
-        if progress_callback:
-            progress_callback("Publication Instagram & TikTok...", 90)
-        print(f"[{timestamp_str}] Etape 5 : Publications...")
         insta = InstagramPublisher()
         tiktok = TikTokPublisher()
+        report["target_profile"] = insta.target_profile
+        if progress_callback:
+            progress_callback(f"Publication sur profil {insta.target_profile}...", 90)
+        print(f"[{timestamp_str}] Etape 5 : Publications sur profil '{insta.target_profile}' ({insta.username})...")
 
         # Story Instagram (vidéo 15s avec l'audio du jour)
         story_to_publish = (

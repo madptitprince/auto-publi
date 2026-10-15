@@ -20,6 +20,7 @@ from src.web.auth import (
 
 from src.config import (
     BASE_DIR,
+    DATA_DIR,
     UPLOADS_STORIES_DIR,
     UPLOADS_VIDEOS_DIR,
     PROCESSED_STORIES_DIR,
@@ -28,6 +29,8 @@ from src.config import (
     DAYS_ORDER,
     get_opening_hours,
     save_opening_hours,
+    get_social_settings,
+    save_social_settings,
 )
 from src.scheduler import (
     run_daily_publication,
@@ -276,6 +279,12 @@ async def dashboard(request: Request):
         else:
             next_run = "Aujourd'hui à 11h30"
 
+    social_cfg = get_social_settings()
+    active_profile = social_cfg["active_profile"]
+    profiles = social_cfg["profiles"]
+    has_tiktok_test = (DATA_DIR / profiles["test"].get("tiktok_cookies_file", "tiktok_cookies.json")).exists()
+    has_tiktok_official = (DATA_DIR / profiles["official"].get("tiktok_cookies_file", "tiktok_cookies_official.json")).exists()
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -293,8 +302,12 @@ async def dashboard(request: Request):
             "schedule_days": schedule_days,
             "has_gemini_key": has_gemini_key,
             "next_run": next_run,
-            "instagram_user": os.getenv("INSTAGRAM_USERNAME", ""),
-            "has_tiktok": (BASE_DIR / "data" / "tiktok_cookies.json").exists(),
+            "active_profile": active_profile,
+            "profiles": profiles,
+            "instagram_user": profiles.get(active_profile, {}).get("instagram_username", ""),
+            "has_tiktok": has_tiktok_official if active_profile == "official" else has_tiktok_test,
+            "has_tiktok_test": has_tiktok_test,
+            "has_tiktok_official": has_tiktok_official,
             "auth_user": getattr(request.state, "user", "admin"),
             "is_today_published": is_today_published,
         },
@@ -385,7 +398,7 @@ publication_status = {
 
 @app.post("/api/trigger/publish")
 async def trigger_publish(
-    simulation: bool = Form(True),
+    simulation: bool = Form(False),
     video_name: str = Form(None),
     hook: str = Form(None),
     description: str = Form(None),
@@ -547,6 +560,32 @@ async def update_credentials(
 
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"status": "success", "message": "Identifiants enregistrés avec succès."}
+
+
+@app.post("/api/settings/profile")
+async def update_social_profile(
+    active_profile: str = Form(...),
+    test_insta_user: str = Form(None),
+    test_insta_pass: str = Form(None),
+    official_insta_user: str = Form(None),
+    official_insta_pass: str = Form(None),
+):
+    profiles_dict = {
+        "test": {},
+        "official": {},
+    }
+    if test_insta_user is not None and test_insta_user.strip():
+        profiles_dict["test"]["instagram_username"] = test_insta_user.strip()
+    if test_insta_pass is not None and test_insta_pass.strip():
+        profiles_dict["test"]["instagram_password"] = test_insta_pass.strip()
+    if official_insta_user is not None and official_insta_user.strip():
+        profiles_dict["official"]["instagram_username"] = official_insta_user.strip()
+    if official_insta_pass is not None and official_insta_pass.strip():
+        profiles_dict["official"]["instagram_password"] = official_insta_pass.strip()
+
+    save_social_settings(active_profile=active_profile, profiles_dict=profiles_dict)
+    label = "Mode Officiel (BCHEF Bourges)" if active_profile == "official" else "Mode Test (Compte bac a sable)"
+    return {"status": "success", "message": f"Profil actif basculé sur : {label}", "active_profile": active_profile}
 
 
 @app.get("/api/status")
