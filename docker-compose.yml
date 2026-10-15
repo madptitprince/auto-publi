@@ -15,6 +15,7 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - ./src:/app/src
+      - ./assets:/app/assets
       - ./uploads:/app/uploads
       - ./processed:/app/processed
       - ./data:/app/data
