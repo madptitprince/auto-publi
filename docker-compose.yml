@@ -14,6 +14,7 @@ services:
       - TZ=Europe/Paris
       - PYTHONUNBUFFERED=1
     volumes:
+      - ./src:/app/src
       - ./uploads:/app/uploads
       - ./processed:/app/processed
       - ./data:/app/data
