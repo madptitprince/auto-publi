@@ -29,8 +29,8 @@ env/
 # Environment and sensitive credentials
 .env
 *.env
-data/instagram_session.json
-data/tiktok_cookies.json
+data/instagram_session*.json
+data/tiktok_cookies*.json
 data/history.json
 data/today_preview.json
 data/last_ai_analysis.json
