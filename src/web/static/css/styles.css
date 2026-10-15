@@ -220,6 +220,54 @@ body {
   }
 }
 
+.user-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  padding: 5px 10px 5px 12px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+
+.user-icon {
+  display: flex;
+  align-items: center;
+  color: var(--brand-orange);
+}
+
+.user-name {
+  color: var(--text-secondary);
+}
+
+.btn-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: var(--bg-surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-logout:hover {
+  background-color: var(--status-rose-dim);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: var(--status-rose);
+  transform: scale(1.05);
+}
+
+
 /* Top Scrollable Pill Navigation Bar */
 .tabs-nav {
   display: flex;

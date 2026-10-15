@@ -253,6 +253,7 @@ async function saveCredentials() {
   const geminiInput = document.getElementById("input-gemini-key");
   const instaUser = document.getElementById("input-insta-user");
   const instaPass = document.getElementById("input-insta-pass");
+  const dashPass = document.getElementById("input-dash-pass");
 
   const formData = new FormData();
   if (geminiInput && geminiInput.value.trim()) {
@@ -264,6 +265,9 @@ async function saveCredentials() {
   if (instaPass && instaPass.value.trim()) {
     formData.append("instagram_password", instaPass.value.trim());
   }
+  if (dashPass && dashPass.value.trim()) {
+    formData.append("dashboard_password", dashPass.value.trim());
+  }
 
   showToast("Mise a jour des identifiants...");
   try {
@@ -271,11 +275,17 @@ async function saveCredentials() {
       method: "POST",
       body: formData,
     });
+    if (res.status === 401) {
+      showToast("Session expiree. Reconnexion requise...", true);
+      setTimeout(() => location.href = "/login", 1200);
+      return;
+    }
     const data = await res.json();
     if (data.status === "success") {
-      showToast("Identifiants enregistres.");
+      showToast("Identifiants enregistres avec succes.");
       if (geminiInput) geminiInput.value = "";
       if (instaPass) instaPass.value = "";
+      if (dashPass) dashPass.value = "";
       setTimeout(() => location.reload(), 1000);
     } else {
       showToast("Erreur lors de l'enregistrement.", true);
@@ -283,6 +293,7 @@ async function saveCredentials() {
   } catch (err) {
     showToast("Erreur de communication avec le serveur.", true);
   }
+
 }
 
 async function regenerateAI() {

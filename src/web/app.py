@@ -6,9 +6,17 @@ import subprocess
 import threading
 from pathlib import Path
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+from src.web.auth import (
+    get_authenticated_user,
+    verify_credentials,
+    create_session_token,
+    COOKIE_NAME,
+    SESSION_DURATION_DAYS,
+)
 
 from src.config import (
     BASE_DIR,
@@ -46,6 +54,87 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.mount("/media/uploads", StaticFiles(directory=str(BASE_DIR / "uploads")), name="uploads")
 app.mount("/media/processed", StaticFiles(directory=str(BASE_DIR / "processed")), name="processed")
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    # Endpoints publics sans authentification requise
+    if (
+        path in ("/login", "/logout", "/favicon.ico")
+        or path.startswith("/static")
+        or path == "/api/status"
+    ):
+        return await call_next(request)
+
+    user = get_authenticated_user(request)
+    if not user:
+        accept = request.headers.get("accept", "")
+        # Redirection vers /login pour les requetes de pages Web
+        if "text/html" in accept or path == "/":
+            next_url = str(request.url.path)
+            if request.url.query:
+                next_url += f"?{request.url.query}"
+            return RedirectResponse(url=f"/login?next={next_url}", status_code=303)
+        # 401 JSON pour les requetes API et medias
+        return JSONResponse(
+            status_code=401,
+            content={"status": "unauthorized", "message": "Authentification requise pour acceder a cette ressource."}
+        )
+
+    request.state.user = user
+    return await call_next(request)
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(
+    request: Request,
+    error: str | None = None,
+    message: str | None = None,
+    next: str = "/",
+):
+    if get_authenticated_user(request):
+        return RedirectResponse(url="/", status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"error": error, "message": message, "next": next},
+    )
+
+
+@app.post("/login")
+async def login_action(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: str = Form("/"),
+):
+    if not verify_credentials(username, password):
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"error": "invalid", "next": next, "username": username},
+            status_code=401,
+        )
+
+    redirect_target = next if (next and next.startswith("/") and not next.startswith("//")) else "/"
+    token = create_session_token(username.strip())
+    response = RedirectResponse(url=redirect_target, status_code=303)
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        max_age=SESSION_DURATION_DAYS * 86400,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/login?message=logged_out", status_code=303)
+    response.delete_cookie(key=COOKIE_NAME)
+    return response
 
 
 @app.on_event("startup")
@@ -163,6 +252,7 @@ async def dashboard(request: Request):
             "next_run": next_run,
             "instagram_user": os.getenv("INSTAGRAM_USERNAME", ""),
             "has_tiktok": (BASE_DIR / "data" / "tiktok_cookies.json").exists(),
+            "auth_user": getattr(request.state, "user", "admin"),
         },
     )
 
@@ -387,6 +477,7 @@ async def update_credentials(
     gemini_api_key: str = Form(None),
     instagram_username: str = Form(None),
     instagram_password: str = Form(None),
+    dashboard_password: str = Form(None),
 ):
     env_path = BASE_DIR / ".env"
     env_content = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
@@ -400,6 +491,9 @@ async def update_credentials(
     if instagram_password is not None and instagram_password.strip():
         updates["INSTAGRAM_PASSWORD"] = instagram_password.strip()
         os.environ["INSTAGRAM_PASSWORD"] = instagram_password.strip()
+    if dashboard_password is not None and dashboard_password.strip():
+        updates["DASHBOARD_PASSWORD"] = dashboard_password.strip()
+        os.environ["DASHBOARD_PASSWORD"] = dashboard_password.strip()
 
     lines = env_content.splitlines()
     for key, val in updates.items():
