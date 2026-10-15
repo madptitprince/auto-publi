@@ -1,3 +1,28 @@
+/* Official BCHEF Brand Fonts */
+@font-face {
+  font-family: 'Heavitas Neue';
+  src: url('/assets/fonts/HeavitasNeue-Black.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Artely Inks';
+  src: url('/assets/fonts/ArtelyInks.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'R41 Etoile';
+  src: url('/assets/fonts/R41Etoile-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --bg-page: #080a0f;
   --bg-surface: #10131c;
@@ -6,17 +31,18 @@
   --bg-glass: rgba(16, 19, 28, 0.85);
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-subtle-hover: rgba(255, 255, 255, 0.15);
-  --border-active: #ff5500;
+  --border-active: #d54a15;
   
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
 
-  --brand-orange: #ff5500;
-  --brand-orange-hover: #ff6a1a;
-  --brand-orange-light: #ff8533;
-  --brand-orange-dim: rgba(255, 85, 0, 0.12);
-  --brand-orange-glow: rgba(255, 85, 0, 0.28);
+  /* Official BCHEF Orange (#d54a15) */
+  --brand-orange: #d54a15;
+  --brand-orange-hover: #ea5318;
+  --brand-orange-light: #f76328;
+  --brand-orange-dim: rgba(213, 74, 21, 0.12);
+  --brand-orange-glow: rgba(213, 74, 21, 0.28);
 
   --status-emerald: #10b981;
   --status-emerald-dim: rgba(16, 185, 129, 0.12);
@@ -26,6 +52,10 @@
   --status-blue-dim: rgba(59, 130, 246, 0.12);
 
   --font-sans: 'Montserrat', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-headline: 'Heavitas Neue', var(--font-sans);
+  --font-artisan: 'Artely Inks', cursive;
+  --font-retro: 'R41 Etoile', serif;
+
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -59,7 +89,7 @@ html {
 body {
   background-color: var(--bg-page);
   background-image: 
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 85, 0, 0.08), transparent 70%),
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(213, 74, 21, 0.08), transparent 70%),
     radial-gradient(ellipse 60% 40% at 90% 80%, rgba(59, 130, 246, 0.03), transparent 60%);
   background-attachment: fixed;
   color: var(--text-primary);
@@ -141,9 +171,25 @@ body {
   min-width: 0;
 }
 
+.brand-logo-container {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.brand-logo-img {
+  height: 30px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 8px var(--brand-orange-glow));
+}
+
 .brand-badge {
-  background: linear-gradient(135deg, var(--brand-orange), #ff6a1a);
+  background: linear-gradient(135deg, var(--brand-orange), var(--brand-orange-hover));
   color: #fff;
+  font-family: var(--font-headline);
   font-weight: 800;
   font-size: 0.9rem;
   letter-spacing: 1.5px;
@@ -159,9 +205,10 @@ body {
 }
 
 .brand-info h1 {
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
+  font-family: var(--font-headline);
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -360,8 +407,8 @@ body {
 
 /* Summary Bar */
 .summary-bar {
-  background: linear-gradient(135deg, rgba(255, 85, 0, 0.09), rgba(16, 19, 28, 0.95));
-  border: 1px solid rgba(255, 85, 0, 0.25);
+  background: linear-gradient(135deg, rgba(213, 74, 21, 0.09), rgba(16, 19, 28, 0.95));
+  border: 1px solid rgba(213, 74, 21, 0.25);
   border-radius: var(--radius-lg);
   padding: 20px 24px;
   display: flex;
@@ -527,7 +574,7 @@ body {
 
 .btn-primary:hover {
   filter: brightness(1.1);
-  box-shadow: 0 6px 20px rgba(255, 85, 0, 0.4);
+  box-shadow: 0 6px 20px rgba(213, 74, 21, 0.4);
   transform: translateY(-1px);
 }
 
@@ -613,11 +660,11 @@ body {
 
 /* Dropzone */
 .dropzone-box {
-  border: 2px dashed rgba(255, 85, 0, 0.3);
+  border: 2px dashed rgba(213, 74, 21, 0.3);
   border-radius: var(--radius-md);
   padding: 36px 20px;
   text-align: center;
-  background-color: rgba(255, 85, 0, 0.03);
+  background-color: rgba(213, 74, 21, 0.03);
   cursor: pointer;
   transition: all var(--transition-normal);
   user-select: none;
@@ -724,7 +771,7 @@ body {
 
 .badge-orange {
   background-color: var(--brand-orange-dim);
-  border: 1px solid rgba(255, 85, 0, 0.3);
+  border: 1px solid rgba(213, 74, 21, 0.3);
   color: #ff8533;
 }
 
@@ -878,7 +925,7 @@ body {
 
 .tag-item {
   background-color: var(--brand-orange-dim);
-  border: 1px solid rgba(255, 85, 0, 0.25);
+  border: 1px solid rgba(213, 74, 21, 0.25);
   color: #ff9955;
   padding: 5px 12px;
   border-radius: 999px;
@@ -890,7 +937,7 @@ body {
 }
 
 .tag-item:hover {
-  background-color: rgba(255, 85, 0, 0.2);
+  background-color: rgba(213, 74, 21, 0.2);
 }
 
 /* Stories Gallery Grid */

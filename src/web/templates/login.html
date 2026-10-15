@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#080a0f">
   <title>Connexion - BCHEF Bourges</title>
+  <link rel="icon" type="image/png" href="/assets/logos/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -15,7 +16,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: radial-gradient(circle at 50% 20%, rgba(255, 85, 0, 0.08) 0%, #080a0f 70%);
+      background: radial-gradient(circle at 50% 20%, rgba(213, 74, 21, 0.08) 0%, #080a0f 70%);
       padding: 1.5rem;
     }
 
@@ -38,26 +39,26 @@
       margin-bottom: 2rem;
     }
 
-    .login-logo {
+    .login-emblem {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, var(--brand-orange) 0%, #d44000 100%);
-      color: #ffffff;
-      font-weight: 800;
-      font-size: 1.4rem;
-      letter-spacing: 0.1em;
-      padding: 0.6rem 1.4rem;
-      border-radius: var(--radius-md);
-      box-shadow: 0 4px 16px var(--brand-orange-glow);
       margin-bottom: 1.25rem;
     }
 
+    .login-emblem img {
+      max-height: 85px;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 16px var(--brand-orange-glow));
+    }
+
     .login-title {
-      font-size: 1.25rem;
-      font-weight: 700;
+      font-family: var(--font-headline);
+      font-size: 1.35rem;
+      font-weight: 800;
       color: var(--text-primary);
-      letter-spacing: 0.02em;
+      letter-spacing: 0.04em;
       margin-bottom: 0.35rem;
     }
 
@@ -196,9 +197,11 @@
   <div class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <div class="login-logo">BCHEF</div>
+        <div class="login-emblem">
+          <img src="/assets/logos/RENARD-BASELINE-ORANGE 2.png" alt="BCHEF - The Real Burger Experience">
+        </div>
         <h1 class="login-title">ESPACE ADMINISTRATION</h1>
-        <p class="login-subtitle">Bourges &bull; Automatisation Reseaux Sociaux</p>
+        <p class="login-subtitle">BCHEF Bourges &bull; Automatisation Reseaux Sociaux</p>
       </div>
 
       {% if error %}

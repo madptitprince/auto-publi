@@ -26,7 +26,27 @@ INSTAGRAM_SESSION_FILE = DATA_DIR / "instagram_session.json"
 TIKTOK_COOKIES_FILE = DATA_DIR / "tiktok_cookies.json"
 
 FONTS_DIR = BASE_DIR / "assets" / "fonts"
-DEFAULT_FONT = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+LOGOS_DIR = BASE_DIR / "assets" / "logos"
+BCHEF_LOGO_PATH = LOGOS_DIR / "BCHEF-ORANGE.png"
+FOX_LOGO_PATH = LOGOS_DIR / "RENARD-BASELINE-ORANGE 2.png"
+
+HEAVITAS_FONT_PATH = FONTS_DIR / "HeavitasNeue-Black.otf"
+ARTELY_FONT_PATH = FONTS_DIR / "ArtelyInks.otf"
+ETOILE_FONT_PATH = FONTS_DIR / "R41Etoile-Regular.otf"
+MONTSERRAT_BOLD_PATH = FONTS_DIR / "Montserrat-Bold.ttf"
+MONTSERRAT_EXTRABOLD_PATH = FONTS_DIR / "Montserrat-ExtraBold.ttf"
+
+# Official BCHEF Brand Color (#d54a15)
+BRAND_ORANGE = "#d54a15"
+BRAND_ORANGE_RGB = (213, 74, 21)
+
+# Default Headline and Story Font: prioritize official BCHEF Heavitas Neue
+if HEAVITAS_FONT_PATH.exists():
+    DEFAULT_FONT = str(HEAVITAS_FONT_PATH)
+elif MONTSERRAT_EXTRABOLD_PATH.exists():
+    DEFAULT_FONT = str(MONTSERRAT_EXTRABOLD_PATH)
+else:
+    DEFAULT_FONT = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
 
 # Ensure runtime directories exist
 for directory in [

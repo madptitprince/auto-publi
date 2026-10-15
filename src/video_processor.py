@@ -13,21 +13,31 @@ from src.config import (
 def get_hook_font(font_size: int) -> ImageFont.FreeTypeFont:
     """
     Selects the best available font for the hook badge:
-    1. Indivisible (if present in assets/fonts/ or system)
-    2. Montserrat-ExtraBold (modern, bold geometric sans-serif)
-    3. Montserrat-Bold
+    1. HeavitasNeue-Black.otf (Official BCHEF Headline font - ultra punchy bold)
+    2. Montserrat-ExtraBold.ttf (modern, bold geometric sans-serif)
+    3. Montserrat-Bold.ttf
     4. DEFAULT_FONT fallback
     """
     fonts_dir = BASE_DIR / "assets" / "fonts"
     if fonts_dir.exists():
-        # Case-insensitive search for any Indivisible font file
+        # 1. Official BCHEF Headline Font: Heavitas Neue Black
+        for target in ["HeavitasNeue-Black.otf", "HeavitasNeue-Black.ttf", "HeavitasNeue.otf"]:
+            fp = fonts_dir / target
+            if fp.exists():
+                try:
+                    return ImageFont.truetype(str(fp), font_size)
+                except Exception:
+                    pass
+
+        # 2. Case-insensitive search for heavitas
         for f in sorted(fonts_dir.iterdir()):
-            if "indivisible" in f.name.lower() and f.suffix.lower() in {".ttf", ".otf"}:
+            if "heavitas" in f.name.lower() and f.suffix.lower() in {".ttf", ".otf"}:
                 try:
                     return ImageFont.truetype(str(f), font_size)
                 except Exception:
                     pass
-        # High-impact geometric sans-serif fallback
+
+        # 3. High-impact geometric sans-serif fallback
         for fallback in ["Montserrat-ExtraBold.ttf", "Montserrat-Bold.ttf"]:
             fp = fonts_dir / fallback
             if fp.exists():

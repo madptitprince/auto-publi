@@ -6,7 +6,7 @@ import subprocess
 import threading
 from pathlib import Path
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -57,8 +57,9 @@ TEMPLATES_DIR = BASE_DIR / "src" / "web" / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-# Mount static and media folders
+# Mount static, assets and media folders
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/assets", StaticFiles(directory=str(BASE_DIR / "assets")), name="assets")
 app.mount("/media/uploads", StaticFiles(directory=str(BASE_DIR / "uploads")), name="uploads")
 app.mount("/media/processed", StaticFiles(directory=str(BASE_DIR / "processed")), name="processed")
 
@@ -70,6 +71,7 @@ async def auth_middleware(request: Request, call_next):
     if (
         path in ("/login", "/logout", "/favicon.ico")
         or path.startswith("/static")
+        or path.startswith("/assets")
         or path == "/api/status"
     ):
         return await call_next(request)
@@ -91,6 +93,14 @@ async def auth_middleware(request: Request, call_next):
 
     request.state.user = user
     return await call_next(request)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def get_favicon():
+    fav = BASE_DIR / "assets" / "logos" / "favicon.png"
+    if fav.exists():
+        return FileResponse(fav, media_type="image/png")
+    return Response(status_code=404)
 
 
 @app.get("/login", response_class=HTMLResponse)
