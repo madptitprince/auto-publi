@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
@@ -147,7 +148,21 @@ class InstagramPublisher:
 
             if is_video:
                 print(f"Publication de la story vidéo Instagram avec son : {media_path.name}...")
-                media = cl.video_upload_to_story(str(media_path))
+                thumb_path = media_path.with_suffix(".jpg")
+                if not thumb_path.exists():
+                    try:
+                        subprocess.run([
+                            "ffmpeg", "-y",
+                            "-ss", "00:00:01",
+                            "-i", str(media_path),
+                            "-vframes", "1",
+                            "-q:v", "2",
+                            str(thumb_path),
+                        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    except Exception as e_thumb:
+                        print(f"Avertissement création miniature story FFmpeg : {e_thumb}")
+                        thumb_path = None
+                media = cl.video_upload_to_story(str(media_path), thumbnail=thumb_path if thumb_path and thumb_path.exists() else None)
             else:
                 print(f"Publication directe de la story photo Instagram : {media_path.name}...")
                 media = cl.photo_upload_to_story(str(media_path))

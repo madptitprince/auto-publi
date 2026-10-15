@@ -326,13 +326,75 @@ def run_daily_publication(
     return report
 
 
+def generate_daily_preview():
+    """
+    Runs automatically every night at 00:01 to prepare the day's preview.
+    Pre-renders the story image + 15s video with today's audio, and analyzes the upcoming video with Gemini.
+    Ensures that when the manager opens the dashboard in the morning, today's preview is already 100% ready.
+    """
+    now = datetime.datetime.now()
+    date_str = now.strftime("%Y-%m-%d")
+    print(f"[{date_str} 00:01] Pré-génération automatique de l'aperçu du jour...")
+
+    # 1. Pre-generate today's story image + 15s MP4 video with daily audio
+    try:
+        story_res = generate_daily_story(output_filename=f"story_{date_str}.png")
+        create_story_video(
+            image_path=Path(story_res["output_path"]),
+            target_date=now.date(),
+            duration=15,
+            output_filename=f"story_{date_str}.mp4",
+        )
+        print(f"[{date_str}] Story vidéo 15s pré-générée pour la journée.")
+    except Exception as e_story:
+        print(f"Erreur pré-génération story : {e_story}")
+
+    # 2. Pick next video in queue and prepare Gemini analysis in cache
+    try:
+        pending = list_pending_videos()
+        video_to_analyze = pending[0] if pending else None
+        if not video_to_analyze:
+            archived = list_archived_videos()
+            video_to_analyze = archived[0] if archived else None
+
+        if video_to_analyze:
+            cache_file = BASE_DIR / "data" / "last_ai_analysis.json"
+            cached = None
+            if cache_file.exists():
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        if data.get("video_name") == video_to_analyze.name:
+                            cached = data.get("analysis")
+                except Exception:
+                    pass
+            if not cached:
+                print(f"[{date_str}] Pré-analyse Gemini de la vidéo {video_to_analyze.name}...")
+                ai_data = analyze_video_with_gemini(video_to_analyze)
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump({"video_name": video_to_analyze.name, "analysis": ai_data}, f, ensure_ascii=False, indent=2)
+                print(f"[{date_str}] Accroche, description et hashtags pré-générés et mis en cache.")
+    except Exception as e_ai:
+        print(f"Erreur pré-analyse IA : {e_ai}")
+
+
 scheduler = BackgroundScheduler()
 
 
 def start_scheduler():
-    """Starts the daily 11:30 AM publication schedule."""
+    """Starts the daily 00:01 preview preparation and 11:30 publication schedule."""
     if not scheduler.running:
-        # Schedule every day at 11:30:00
+        # 1. Preview preparation every night at 00:01
+        scheduler.add_job(
+            func=generate_daily_preview,
+            trigger=CronTrigger(hour=0, minute=1),
+            id="daily_bchef_preview",
+            name="Pré-génération quotidienne de l'aperçu BCHEF",
+            replace_existing=True,
+        )
+
+        # 2. Daily publication at 11:30
         scheduler.add_job(
             func=run_daily_publication,
             trigger=CronTrigger(hour=11, minute=30),
@@ -342,7 +404,9 @@ def start_scheduler():
             kwargs={"is_simulation": False},
         )
         scheduler.start()
-        print("Planificateur activé : publication programmée chaque jour à 11h30.")
+        print("Planificateur activé :")
+        print(" - Pré-génération de l'aperçu du jour chaque nuit à 00h01.")
+        print(" - Publication automatique chaque jour à 11h30.")
 
 
 if __name__ == "__main__":
