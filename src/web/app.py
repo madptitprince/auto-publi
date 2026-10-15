@@ -252,8 +252,29 @@ async def dashboard(request: Request):
 
     has_gemini_key = bool(os.getenv("GEMINI_API_KEY"))
 
-    # Next run calculation
-    next_run = "Aujourd'hui à 11h30"
+    # Dynamic next run calculation based on APScheduler and publication status
+    next_run = "Demain à 11h30"
+    try:
+        job = scheduler.get_job("daily_bchef_publication")
+        if job and job.next_run_time:
+            run_dt = job.next_run_time
+            today_date = datetime.datetime.now(run_dt.tzinfo).date() if run_dt.tzinfo else datetime.date.today()
+            if run_dt.date() == today_date and not is_today_published:
+                next_run = f"Aujourd'hui à {run_dt.strftime('%Hh%M')}"
+            else:
+                next_run = f"Demain à {run_dt.strftime('%Hh%M')}"
+        else:
+            now_dt = datetime.datetime.now()
+            if is_today_published or (now_dt.hour > 11 or (now_dt.hour == 11 and now_dt.minute >= 30)):
+                next_run = "Demain à 11h30"
+            else:
+                next_run = "Aujourd'hui à 11h30"
+    except Exception:
+        now_dt = datetime.datetime.now()
+        if is_today_published or (now_dt.hour > 11 or (now_dt.hour == 11 and now_dt.minute >= 30)):
+            next_run = "Demain à 11h30"
+        else:
+            next_run = "Aujourd'hui à 11h30"
 
     return templates.TemplateResponse(
         request=request,
