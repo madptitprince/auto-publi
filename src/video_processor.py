@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -131,17 +132,23 @@ def create_hook_badge(
 
 def get_video_dimensions(video_path: Path) -> tuple[int, int]:
     """Retrieve video resolution (width, height) using ffprobe."""
-    cmd = [
-        "ffprobe",
-        "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height",
-        "-of", "csv=p=0:s=x",
-        str(video_path),
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    w_str, h_str = result.stdout.strip().split("x")
-    return int(w_str), int(h_str)
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "json",
+            str(video_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+        streams = data.get("streams", [])
+        if streams and "width" in streams[0] and "height" in streams[0]:
+            return int(streams[0]["width"]), int(streams[0]["height"])
+    except Exception as e:
+        print(f"Erreur lecture dimensions video {video_path}: {e}")
+    return 1080, 1920
 
 
 def process_video_with_hook(
