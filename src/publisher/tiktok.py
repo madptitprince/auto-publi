@@ -36,26 +36,21 @@ class TikTokPublisher:
 
     def _dismiss_modals(self, page):
         """Ferme ou neutralise les modales, tutoriels et popups dans TikTok Studio."""
-        # 1. Echap au clavier pour fermer les dialogues standards
-        try:
-            page.keyboard.press("Escape")
-            time.sleep(0.3)
-        except Exception:
-            pass
-
-        # 2. Boutons d'action usuels des modales et alertes
+        # 1. Boutons d'action usuels des modales et alertes (Turn on, Got it, etc.)
         dismiss_texts = [
-            "J'ai compris",
+            "Turn on",
             "Got it",
+            "J'ai compris",
             "OK",
             "Ok",
             "D'accord",
+            "Allow",
+            "Autoriser",
+            "Activer",
             "Fermer",
             "Close",
             "Continuer",
             "Continue",
-            "Activer",
-            "Autoriser",
             "Non merci",
             "Plus tard",
             "Not now",
@@ -68,6 +63,7 @@ class TikTokPublisher:
         for txt in dismiss_texts:
             try:
                 btns = page.locator(
+                    f'button:has-text("{txt}"), '
                     f'div[role="dialog"] button:has-text("{txt}"), '
                     f'.TUXModal button:has-text("{txt}"), '
                     f'[data-floating-ui-portal] button:has-text("{txt}")'
@@ -80,6 +76,17 @@ class TikTokPublisher:
                         time.sleep(0.3)
             except Exception:
                 pass
+
+        # 2. Si un dialogue "Are you sure you want to exit" apparait par erreur, cliquer sur Cancel
+        try:
+            exit_modal = page.locator('*:has-text("Are you sure you want to exit")')
+            if exit_modal.count() > 0 and exit_modal.first.is_visible():
+                cancel_btn = page.locator('button:has-text("Cancel")').first
+                if cancel_btn.count() > 0:
+                    cancel_btn.click(timeout=1000, force=True)
+                    time.sleep(0.3)
+        except Exception:
+            pass
 
         # 3. Icones ou croix de fermeture
         try:
@@ -107,7 +114,7 @@ class TikTokPublisher:
                 portals.forEach(p => {
                     const hasEditor = p.querySelector('div[contenteditable="true"]');
                     const hasFileInput = p.querySelector('input[type="file"]');
-                    const hasPublish = p.querySelector('button[type="submit"]') || p.innerText.includes('Publier');
+                    const hasPublish = p.querySelector('button[type="submit"]') || p.innerText.includes('Post') || p.innerText.includes('Publier');
                     if (!hasEditor && !hasFileInput && !hasPublish) {
                         p.remove();
                     }
@@ -246,10 +253,16 @@ class TikTokPublisher:
                 time.sleep(2)
                 self._dismiss_modals(page)
 
-                # 6. Clic sur le bouton Publier
-                publish_btn = page.locator('button:has-text("Publier")').first
-                if publish_btn.count() == 0:
-                    publish_btn = page.locator('button:has-text("Post")').first
+                # 6. Defilement vers le bas et detection du bouton Post
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                time.sleep(2)
+                self._dismiss_modals(page)
+
+                publish_btn = page.locator(
+                    'button.Button__root--type-primary:has-text("Post"), '
+                    'button:has-text("Post"), '
+                    'button:has-text("Publier")'
+                ).first
 
                 if publish_btn.count() > 0:
                     # Attente que les verifications TikTok se terminent
@@ -260,15 +273,16 @@ class TikTokPublisher:
                         time.sleep(2)
 
                     publish_btn.click(force=True, timeout=5000)
-                    time.sleep(3)
+                    time.sleep(4)
 
                     # Gestion des confirmations secondaires
                     for confirm_txt in [
-                        "Publier maintenant",
                         "Post now",
-                        "Ignorer et publier",
                         "Post anyway",
+                        "Publier maintenant",
+                        "Ignorer et publier",
                         "Continuer la publication",
+                        "Continue",
                         "Confirmer",
                         "J'ai compris",
                     ]:
@@ -280,8 +294,18 @@ class TikTokPublisher:
                         except Exception:
                             pass
 
-                    # Attente de validation finale
-                    time.sleep(8)
+                    # Attente de la redirection ou confirmation de succes
+                    is_published = False
+                    for _ in range(15):
+                        time.sleep(2)
+                        cur_url = page.url
+                        if "content" in cur_url or "manage" in cur_url:
+                            is_published = True
+                            break
+                        if page.locator('*:has-text("Manage your posts"), *:has-text("Your video has been published"), *:has-text("Uploaded")').count() > 0:
+                            is_published = True
+                            break
+
                     screenshot_path = DATA_DIR / "tiktok_last_success.png"
                     try:
                         page.screenshot(path=str(screenshot_path))
@@ -289,14 +313,22 @@ class TikTokPublisher:
                         pass
 
                     browser.close()
-                    return {
-                        "platform": "tiktok",
-                        "type": "video",
-                        "status": "published",
-                        "file": str(video_path),
-                        "caption": caption,
-                        "location": location_query,
-                    }
+                    if is_published:
+                        return {
+                            "platform": "tiktok",
+                            "type": "video",
+                            "status": "published",
+                            "file": str(video_path),
+                            "caption": caption,
+                            "location": location_query,
+                        }
+                    else:
+                        return {
+                            "platform": "tiktok",
+                            "type": "video",
+                            "status": "error",
+                            "error": "La publication TikTok n'a pas confirme la redirection vers la liste des contenus.",
+                        }
                 else:
                     err_screenshot = DATA_DIR / "tiktok_error_no_btn.png"
                     try:
