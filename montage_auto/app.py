@@ -31,7 +31,7 @@ from montage_auto.history_manager import (
 )
 from montage_auto.video_editor import render_montage
 
-app = FastAPI(title="BCHEF Montage Studio", version="1.0.0")
+app = FastAPI(title="BCHEF Montage Studio", version="1.0.0", root_path=os.getenv("ROOT_PATH", ""))
 
 # Mount static and media directories
 STATIC_DIR = BASE_DIR / "static"

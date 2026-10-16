@@ -1,10 +1,12 @@
 // BCHEF Montage Studio Front-End Logic
+const API_BASE = window.__ROOT_PATH__ || (window.location.pathname.startsWith('/studio') ? '/studio' : '');
 let selectedRushs = new Set();
 let currentJobId = null;
 let pollInterval = null;
 
 // DOM Elements
 const navItems = document.querySelectorAll('.nav-item');
+const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
 const tabPanes = document.querySelectorAll('.tab-pane');
 
 const btnShowLibrary = document.getElementById('btn-show-library');
@@ -41,6 +43,8 @@ const historyContainer = document.getElementById('history-container');
 const rawRushsContainer = document.getElementById('raw-rushs-container');
 const historyBadge = document.getElementById('history-badge');
 const rushsBadge = document.getElementById('rushs-badge');
+const mobileHistoryBadge = document.getElementById('mobile-history-badge');
+const mobileRushsBadge = document.getElementById('mobile-rushs-badge');
 const toastEl = document.getElementById('toast');
 
 // Initialize
@@ -53,26 +57,37 @@ document.addEventListener('DOMContentLoaded', () => {
     loadHistory();
 });
 
+// Tab Switcher for both desktop and mobile
+function switchTab(tabId) {
+    document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(item => {
+        if (item.dataset.tab === tabId) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+
+    tabPanes.forEach(pane => {
+        if (pane.id === `tab-${tabId}`) {
+            pane.classList.remove('hidden');
+            pane.classList.add('active');
+        } else {
+            pane.classList.add('hidden');
+            pane.classList.remove('active');
+        }
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (tabId === 'history') loadHistory();
+    if (tabId === 'rushs') loadRawRushsTable();
+}
+
 // Navigation Handling
 function initNavigation() {
-    navItems.forEach(item => {
+    document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(item => {
         item.addEventListener('click', () => {
-            const tabId = item.dataset.tab;
-            navItems.forEach(n => n.classList.remove('active'));
-            item.classList.add('active');
-
-            tabPanes.forEach(pane => {
-                if (pane.id === `tab-${tabId}`) {
-                    pane.classList.remove('hidden');
-                    pane.classList.add('active');
-                } else {
-                    pane.classList.add('hidden');
-                    pane.classList.remove('active');
-                }
-            });
-
-            if (tabId === 'history') loadHistory();
-            if (tabId === 'rushs') loadRawRushsTable();
+            switchTab(item.dataset.tab);
         });
     });
 }
@@ -107,10 +122,11 @@ function showToast(message, isError = false) {
 // Load and Render Rushs
 async function loadRushs() {
     try {
-        const res = await fetch('/api/rushs');
+        const res = await fetch(`${API_BASE}/api/rushs`);
         const data = await res.json();
         const rushs = data.rushs || [];
         rushsBadge.textContent = rushs.length;
+        if (mobileRushsBadge) mobileRushsBadge.textContent = rushs.length;
 
         if (rushs.length === 0) {
             rushsGrid.innerHTML = '<div class="loading-state">Aucun rush disponible. Téléversez-en un nouveau ci-dessus !</div>';
@@ -127,7 +143,7 @@ async function loadRushs() {
                 <input type="checkbox" class="rush-checkbox" ${selectedRushs.has(rush.relative_path) ? 'checked' : ''}>
                 <button type="button" class="btn-card-delete-rush" data-path="${rush.relative_path}" title="Supprimer ce rush définitivement">✕</button>
                 <div class="rush-thumbnail">
-                    <video src="/rushs-media/${encodeURIComponent(rush.relative_path)}" preload="metadata" muted></video>
+                    <video src="${API_BASE}/rushs-media/${encodeURIComponent(rush.relative_path)}" preload="metadata" muted playsinline></video>
                     <span class="rush-meta-pill">${rush.duration}s</span>
                 </div>
                 <div class="rush-info">
@@ -222,7 +238,7 @@ async function handleUpload(fileList) {
     uploadStatus.innerHTML = '<div class="loading-state">Téléversement des fichiers en cours...</div>';
 
     try {
-        const res = await fetch('/api/rushs/upload', {
+        const res = await fetch(`${API_BASE}/api/rushs/upload`, {
             method: 'POST',
             body: formData,
         });
@@ -269,7 +285,7 @@ function initMontageForm() {
         progressCard.scrollIntoView({ behavior: 'smooth' });
 
         try {
-            const res = await fetch('/api/montages/start', {
+            const res = await fetch(`${API_BASE}/api/montages/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -292,7 +308,7 @@ function initMontageForm() {
 async function pollJobStatus() {
     if (!currentJobId) return;
     try {
-        const res = await fetch(`/api/montages/jobs/${currentJobId}`);
+        const res = await fetch(`${API_BASE}/api/montages/jobs/${currentJobId}`);
         const job = await res.json();
 
         progressBarFill.style.width = `${job.progress}%`;
@@ -334,17 +350,18 @@ function displayResult(result) {
         resultHashtags.appendChild(span);
     });
 
-    resultVideo.src = result.video_url;
+    const videoSrc = `${API_BASE}${result.video_url.startsWith('/') ? result.video_url : '/' + result.video_url}`;
+    resultVideo.src = videoSrc;
     resultVideo.load();
 
-    btnDownloadResult.href = result.video_url;
+    btnDownloadResult.href = videoSrc;
     btnDownloadResult.setAttribute('download', result.filename);
 
     btnSendQueue.onclick = async () => {
         try {
             btnSendQueue.disabled = true;
             btnSendQueue.textContent = 'Transmission en cours...';
-            const res = await fetch(`/api/montages/${result.id}/send-to-queue`, { method: 'POST' });
+            const res = await fetch(`${API_BASE}/api/montages/${result.id}/send-to-queue`, { method: 'POST' });
             const data = await res.json();
             showToast(data.message || 'Vidéo transmise à la file d\'attente !');
         } catch (err) {
@@ -367,10 +384,11 @@ function displayResult(result) {
 // Load and Render History
 async function loadHistory() {
     try {
-        const res = await fetch('/api/history');
+        const res = await fetch(`${API_BASE}/api/history`);
         const data = await res.json();
         const history = data.history || [];
         historyBadge.textContent = history.length;
+        if (mobileHistoryBadge) mobileHistoryBadge.textContent = history.length;
 
         if (history.length === 0) {
             historyContainer.innerHTML = '<div class="loading-state">Aucun montage réalisé pour le moment.</div>';
@@ -381,9 +399,10 @@ async function loadHistory() {
         history.forEach(item => {
             const card = document.createElement('div');
             card.className = 'history-card';
+            const vUrl = `${API_BASE}${item.video_url.startsWith('/') ? item.video_url : '/' + item.video_url}`;
             card.innerHTML = `
                 <div class="history-video-thumb">
-                    <video src="${item.video_url}" controls playsinline preload="metadata"></video>
+                    <video src="${vUrl}" controls playsinline preload="metadata"></video>
                 </div>
                 <div class="history-body">
                     <div class="history-meta">
@@ -393,11 +412,11 @@ async function loadHistory() {
                     <h3 class="history-title">${item.hook || item.filename}</h3>
                     <p style="font-size: 12px; color: #94a3b8; line-height: 1.4;">${item.description || ''}</p>
                     <div class="history-actions">
-                        <a href="${item.video_url}" download="${item.filename}" class="btn-secondary" style="flex: 1; padding: 6px 10px; font-size: 11px;">
+                        <a href="${vUrl}" download="${item.filename}" class="btn-secondary" style="flex: 1; padding: 8px 10px; font-size: 11px; text-align: center; text-decoration: none;">
                             Télécharger
                         </a>
-                        <button class="btn-primary btn-queue-action" data-id="${item.id}" style="flex: 1.5; padding: 6px 10px; font-size: 11px;">
-                            Port 8000
+                        <button class="btn-primary btn-queue-action" data-id="${item.id}" style="flex: 1.5; padding: 8px 10px; font-size: 11px;">
+                            Publier (8000)
                         </button>
                         <button class="btn-danger btn-delete-action" data-id="${item.id}">
                             ✕
@@ -409,7 +428,7 @@ async function loadHistory() {
             // Queue action
             card.querySelector('.btn-queue-action').addEventListener('click', async () => {
                 try {
-                    const resQ = await fetch(`/api/montages/${item.id}/send-to-queue`, { method: 'POST' });
+                    const resQ = await fetch(`${API_BASE}/api/montages/${item.id}/send-to-queue`, { method: 'POST' });
                     const resData = await resQ.json();
                     showToast(resData.message || 'Transmis à la file d\'attente !');
                 } catch (err) {
@@ -420,7 +439,7 @@ async function loadHistory() {
             // Delete action
             card.querySelector('.btn-delete-action').addEventListener('click', async () => {
                 if (confirm('Voulez-vous supprimer ce montage ?')) {
-                    await fetch(`/api/history/${item.id}`, { method: 'DELETE' });
+                    await fetch(`${API_BASE}/api/history/${item.id}`, { method: 'DELETE' });
                     loadHistory();
                     showToast('Montage supprimé.');
                 }
@@ -436,7 +455,7 @@ async function loadHistory() {
 // Load and Render Raw Rushs Table
 async function loadRawRushsTable() {
     try {
-        const res = await fetch('/api/rushs');
+        const res = await fetch(`${API_BASE}/api/rushs`);
         const data = await res.json();
         const rushs = data.rushs || [];
 
@@ -468,10 +487,10 @@ async function loadRawRushsTable() {
                     <td>${r.size_mb} Mo</td>
                     <td>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <button class="btn-secondary btn-quick-use" data-path="${r.relative_path}" style="padding: 4px 10px; font-size: 11px;">
+                            <button class="btn-secondary btn-quick-use" data-path="${r.relative_path}" style="padding: 6px 12px; font-size: 11px;">
                                 Utiliser
                             </button>
-                            <button class="btn-danger btn-delete-rush" data-path="${r.relative_path}" style="padding: 4px 10px; font-size: 11px;" title="Supprimer ce rush pour libérer de l'espace">
+                            <button class="btn-danger btn-delete-rush" data-path="${r.relative_path}" style="padding: 6px 12px; font-size: 11px;" title="Supprimer ce rush pour libérer de l'espace">
                                 Supprimer
                             </button>
                         </div>
@@ -489,7 +508,7 @@ async function loadRawRushsTable() {
                 selectedRushs.clear();
                 selectedRushs.add(p);
                 // Switch to Create tab
-                document.getElementById('nav-create').click();
+                switchTab('create');
                 loadRushs();
             });
         });
@@ -510,7 +529,7 @@ async function loadRawRushsTable() {
 // Global Delete Rush Function
 async function deleteRushFile(relativePath) {
     try {
-        const res = await fetch(`/api/rushs/${encodeURIComponent(relativePath)}`, { method: 'DELETE' });
+        const res = await fetch(`${API_BASE}/api/rushs/${encodeURIComponent(relativePath)}`, { method: 'DELETE' });
         const data = await res.json();
         if (res.ok) {
             showToast(data.message || 'Rush supprimé avec succès.');

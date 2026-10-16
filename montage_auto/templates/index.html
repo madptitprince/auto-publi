@@ -2,17 +2,46 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>BCHEF Bourges - Studio Montage Vidéo</title>
     <link rel="icon" type="image/png" href="/assets/logos/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
+    <script>
+        // Support dynamic prefix if reverse-proxied under /studio
+        window.__ROOT_PATH__ = window.location.pathname.startsWith('/studio') ? '/studio' : '';
+        if (window.__ROOT_PATH__) {
+            document.querySelector('link[rel="stylesheet"]').href = window.__ROOT_PATH__ + '/static/css/style.css';
+            document.querySelector('link[rel="icon"]').href = window.__ROOT_PATH__ + '/assets/logos/favicon.png';
+        }
+    </script>
 </head>
 <body>
+    <!-- Mobile Sticky Top Bar -->
+    <header class="mobile-top-bar">
+        <div class="mobile-brand">
+            <img src="/assets/logos/BCHEF-ORANGE.png" alt="BCHEF" class="mobile-logo-img">
+            <div class="mobile-brand-text">
+                <span class="mobile-brand-title">BCHEF</span>
+                <span class="mobile-brand-subtitle">STUDIO MONTAGE</span>
+            </div>
+        </div>
+        <div class="mobile-top-actions">
+            <div class="mobile-status-pill">
+                <span class="pulse-dot"></span>
+                <span>IA 3.8</span>
+            </div>
+            <a href="#" class="mobile-link-publi" onclick="const p = window.location.protocol; const h = window.location.hostname; const target = (p === 'https:' || h !== 'localhost') ? p + '//' + h : 'http://localhost:8000'; window.open(target, '_blank'); return false;" title="Ouvrir Auto-Publi">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Publi</span>
+            </a>
+        </div>
+    </header>
+
     <div class="app-layout">
-        <!-- Sidebar Navigation -->
+        <!-- Sidebar Navigation (Desktop) -->
         <aside class="sidebar">
             <div class="brand-container">
                 <div class="brand-logo-container">
@@ -317,7 +346,43 @@
         </main>
     </div>
 
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="mobile-bottom-nav">
+        <button class="mobile-nav-item active" data-tab="create" id="mobile-nav-create">
+            <svg class="mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Montage</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="history" id="mobile-nav-history">
+            <div class="mobile-icon-wrapper">
+                <svg class="mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span class="mobile-badge" id="mobile-history-badge">0</span>
+            </div>
+            <span>Historique</span>
+        </button>
+        <button class="mobile-nav-item" data-tab="rushs" id="mobile-nav-rushs">
+            <div class="mobile-icon-wrapper">
+                <svg class="mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                    <line x1="7" y1="2" x2="7" y2="22"></line>
+                    <line x1="17" y1="2" x2="17" y2="22"></line>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                </svg>
+                <span class="mobile-badge" id="mobile-rushs-badge">0</span>
+            </div>
+            <span>Rushs</span>
+        </button>
+    </nav>
+
     <!-- Scripts -->
-    <script src="/static/js/app.js"></script>
+    <script>
+        const scriptEl = document.createElement('script');
+        scriptEl.src = (window.__ROOT_PATH__ || '') + '/static/js/app.js';
+        document.body.appendChild(scriptEl);
+    </script>
 </body>
 </html>

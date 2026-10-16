@@ -109,6 +109,23 @@ server {
     server_name bchef.duckdns.org;
     client_max_body_size 500M;
 
+    location /studio/ {
+        proxy_pass http://127.0.0.1:8002/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /studio;
+
+        proxy_connect_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+    }
+
+    location = /studio {
+        return 301 https://$host/studio/;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
@@ -164,7 +181,7 @@ server {
     return 404;
 }
 NGINX_CONF
-    sudo nginx -t && sudo systemctl reload nginx
+    sudo nginx -t && sudo systemctl restart nginx
   fi
 
   # Lancement Docker Compose (Auto-Publi + Montage Studio)
@@ -179,6 +196,6 @@ echo ""
 echo "============================================================"
 echo "  DÉPLOIEMENT TERMINÉ AVEC SUCCÈS !"
 echo "  Tableau de bord Publication : https://bchef.duckdns.org"
-echo "  Studio de Montage Vidéo      : https://bchef.duckdns.org:8001"
+echo "  Studio de Montage Vidéo      : https://bchef.duckdns.org/studio/ (ou :8001)"
 echo "  Publication quotidienne active : 11h30 (Europe/Paris)"
 echo "============================================================"
