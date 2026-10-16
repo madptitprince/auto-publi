@@ -347,3 +347,42 @@ def publish_single_tiktok(
         location_query=location_query,
     )
 
+
+if __name__ == "__main__":
+    from src.scheduler import get_today_preview, save_today_preview
+    from src.config import PROCESSED_VIDEOS_DIR
+
+    preview = get_today_preview()
+    if not preview or not preview.get("processed_video"):
+        print("Aucun apercu trouve dans today_preview.json")
+        exit(1)
+
+    vid_path = PROCESSED_VIDEOS_DIR / preview["processed_video"]
+    if not vid_path.exists():
+        print(f"Video introuvable : {vid_path}")
+        exit(1)
+
+    caption_line = preview.get("description", "Rejoignez-nous chez BCHEF Bourges !")
+    hashtags = preview.get("hashtags", ["#bchef", "#bourges", "#burger"])
+    full_caption = f"{caption_line}\n\n{' '.join(hashtags)}"
+
+    print(f"Publication TikTok pour : {vid_path.name}")
+    print(f"Legende : {full_caption}")
+
+    res = publish_single_tiktok(
+        video_path=vid_path,
+        caption=full_caption,
+        target_profile="official",
+        simulation=False,
+        location_query="BCHEF Bourges",
+    )
+    print("Resultat TikTok :", json.dumps(res, indent=2, ensure_ascii=False))
+
+    if res.get("status") == "published":
+        pubs = [p for p in preview.get("publications", []) if p.get("platform") != "tiktok"]
+        pubs.append(res)
+        preview["publications"] = pubs
+        save_today_preview(preview)
+        print("today_preview.json mis a jour avec succes.")
+
+
