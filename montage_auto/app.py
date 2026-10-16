@@ -31,14 +31,7 @@ from montage_auto.history_manager import (
 )
 from montage_auto.video_editor import render_montage
 
-app = FastAPI(title="BCHEF Montage Studio", version="1.0.0", root_path=os.getenv("ROOT_PATH", ""))
-
-@app.middleware("http")
-async def root_path_middleware(request: Request, call_next):
-    prefix = request.headers.get("x-forwarded-prefix")
-    if prefix:
-        request.scope["root_path"] = prefix
-    return await call_next(request)
+app = FastAPI(title="BCHEF Montage Studio", version="1.0.0")
 
 # Mount static and media directories
 STATIC_DIR = BASE_DIR / "static"
