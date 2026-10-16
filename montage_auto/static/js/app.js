@@ -48,14 +48,20 @@ const mobileRushsBadge = document.getElementById('mobile-rushs-badge');
 const toastEl = document.getElementById('toast');
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+function initApp() {
     initNavigation();
     initSourceSwitcher();
     initDropzone();
     initMontageForm();
     loadRushs();
     loadHistory();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}
 
 // Tab Switcher for both desktop and mobile
 function switchTab(tabId) {

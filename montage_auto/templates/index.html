@@ -4,19 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>BCHEF Bourges - Studio Montage Vidéo</title>
-    <link rel="icon" type="image/png" href="/assets/logos/favicon.png">
+    <script>
+        // Support dynamic prefix if reverse-proxied under /studio
+        window.__ROOT_PATH__ = "{{ request.scope.get('root_path', '') }}" || (window.location.pathname.startsWith('/studio') ? '/studio' : '');
+    </script>
+    <link rel="icon" type="image/png" href="{{ request.scope.get('root_path', '') }}/assets/logos/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css">
-    <script>
-        // Support dynamic prefix if reverse-proxied under /studio
-        window.__ROOT_PATH__ = window.location.pathname.startsWith('/studio') ? '/studio' : '';
-        if (window.__ROOT_PATH__) {
-            document.querySelector('link[rel="stylesheet"]').href = window.__ROOT_PATH__ + '/static/css/style.css';
-            document.querySelector('link[rel="icon"]').href = window.__ROOT_PATH__ + '/assets/logos/favicon.png';
-        }
-    </script>
+    <link rel="stylesheet" href="{{ request.scope.get('root_path', '') }}/static/css/style.css">
 </head>
 <body>
     <!-- Mobile Sticky Top Bar -->
@@ -379,10 +375,6 @@
     </nav>
 
     <!-- Scripts -->
-    <script>
-        const scriptEl = document.createElement('script');
-        scriptEl.src = (window.__ROOT_PATH__ || '') + '/static/js/app.js';
-        document.body.appendChild(scriptEl);
-    </script>
+    <script src="{{ request.scope.get('root_path', '') }}/static/js/app.js"></script>
 </body>
 </html>

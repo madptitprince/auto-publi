@@ -70,6 +70,8 @@ body {
     color: var(--text-primary);
     min-height: 100vh;
     display: flex;
+    flex-direction: column;
+    width: 100%;
     overflow-x: hidden;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
@@ -78,7 +80,9 @@ body {
 /* Base Layout */
 .app-layout {
     display: flex;
-    width: 100vw;
+    flex-direction: row;
+    width: 100%;
+    flex-grow: 1;
     height: 100vh;
     overflow: hidden;
 }
@@ -1313,10 +1317,10 @@ body {
 
     /* Stack app layout */
     .app-layout {
-        flex-direction: column;
-        width: 100vw;
+        flex-direction: column !important;
+        width: 100% !important;
         height: auto;
-        min-height: 100vh;
+        min-height: calc(100vh - 58px);
         overflow-x: hidden;
         overflow-y: visible;
     }
@@ -1459,6 +1463,27 @@ body {
         justify-content: center;
     }
 
+    /* Result Layout Responsive */
+    .result-layout {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .video-preview-wrapper {
+        max-height: 480px;
+    }
+
+    .result-actions {
+        flex-direction: column;
+        width: 100%;
+        gap: 10px;
+    }
+
+    .result-actions a, .result-actions button {
+        width: 100%;
+        justify-content: center;
+    }
+
     /* Toast */
     .toast {
         left: 14px;
@@ -1476,3 +1501,4 @@ body {
         to { transform: translateY(0); opacity: 1; }
     }
 }
+
