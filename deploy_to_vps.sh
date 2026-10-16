@@ -66,29 +66,37 @@ tar --exclude='.venv' \
     --exclude='data/history.json' \
     --exclude='data/instagram_session.json' \
     --exclude='data/tiktok_cookies.json' \
+    --exclude='montage_auto/outputs/*' \
+    --exclude='montage_auto/scratch/*' \
+    --exclude='montage_auto/rushs/**/*.MOV' \
+    --exclude='montage_auto/rushs/**/*.mov' \
+    --exclude='montage_auto/rushs/**/*.mp4' \
+    --exclude='montage_auto/data/history.json' \
     --exclude='*.log' \
     -czf - . | ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" "$VPS_USER@$VPS_IP" "tar -xzf - -C ~/auto-publi"
 
-# 4. Lancement du conteneur Docker avec docker compose
-echo "[4/4] Démarrage du conteneur en arrière-plan..."
+# 4. Lancement des conteneurs Docker avec docker compose
+echo "[4/4] Démarrage des conteneurs en arrière-plan..."
 ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" "$VPS_USER@$VPS_IP" "bash -s" << 'EOF'
   cd ~/auto-publi
   # Configuration du pare-feu local Ubuntu si actif
   if command -v ufw &> /dev/null; then
     sudo ufw allow 8000/tcp || true
+    sudo ufw allow 8001/tcp || true
     sudo ufw allow 22/tcp || true
   fi
-  # Lancement Docker Compose
+  # Lancement Docker Compose (Auto-Publi + Montage Studio)
   sudo docker compose down || true
   sudo docker compose up -d --build
-  echo "Attente de l'initialisation du serveur..."
-  sleep 6
+  echo "Attente de l'initialisation des serveurs..."
+  sleep 8
   sudo docker compose ps
 EOF
 
 echo ""
 echo "============================================================"
 echo "  DÉPLOIEMENT TERMINÉ AVEC SUCCÈS !"
-echo "  Accès au tableau de bord Web : http://$VPS_IP:8000"
+echo "  Tableau de bord Publication : http://$VPS_IP:8000"
+echo "  Studio de Montage Vidéo      : http://$VPS_IP:8001"
 echo "  Publication quotidienne active : 11h30 (Europe/Paris)"
 echo "============================================================"

@@ -1,0 +1,27 @@
+Le besoin pour le montage vidéo (en résumé simple)
+
+Pour transformer vos rushs bruts en une vidéo promotionnelle finale, le système doit simplement accomplir 3 tâches :
+
+    Le tri intelligent (Le « Cerveau » - IA)
+
+        Besoin : Analyser les vidéos brutes, repérer les moments appétissants (cuisson, assemblage, résultat), couper les temps morts et les remettre dans l'ordre chronologique de la recette.
+
+        Outil : API Gemini Flash.
+
+    La découpe et l'assemblage (Les « Ciseaux » - Moteur de rendu)
+
+        Besoin : Découper précisément les secondes choisies par l'IA, les coller bout à bout sans perte de qualité et calibrer la durée finale entre 20 et 30 secondes.
+
+        Outil : FFmpeg (logiciel gratuit et automatique).
+
+    L'habillage sonore (L'« Ambiance »)
+
+        Besoin : Couper les bruits parasites de la cuisine (discussions, bips des machines) et ajouter une musique entraînante (Lo-Fi, Hip-hop ou Funk).
+
+        Outil : Piste audio libre de droits intégrée par FFmpeg.
+        sous titres
+
+Ce qu'il vous faut au départ :
+
+    1 à 5 courtes vidéos brutes filmées à la verticale (format Reel / TikTok).
+

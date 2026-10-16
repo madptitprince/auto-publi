@@ -55,6 +55,19 @@ processed/stories/*
 processed/archive/*
 !processed/archive/.gitkeep
 
+# Montage Auto Studio
+montage_auto/outputs/*
+!montage_auto/outputs/.gitkeep
+montage_auto/scratch/*
+!montage_auto/scratch/.gitkeep
+montage_auto/rushs/**/*.MOV
+montage_auto/rushs/**/*.mov
+montage_auto/rushs/**/*.mp4
+montage_auto/rushs/**/*.MP4
+montage_auto/rushs/uploads/*
+!montage_auto/rushs/uploads/.gitkeep
+montage_auto/data/history.json
+
 # Operating system artifacts
 .DS_Store
 Thumbs.db

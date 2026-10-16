@@ -34,13 +34,15 @@ RUN playwright install --with-deps chromium
 
 # Copy application source code and assets
 COPY src/ /app/src/
+COPY montage_auto/ /app/montage_auto/
 COPY assets/ /app/assets/
 
 # Create runtime directories
-RUN mkdir -p /app/uploads/stories /app/uploads/videos /app/processed/stories /app/processed/videos /app/processed/archive /app/data
+RUN mkdir -p /app/uploads/stories /app/uploads/videos /app/processed/stories /app/processed/videos /app/processed/archive /app/data /app/montage_auto/outputs /app/montage_auto/rushs /app/montage_auto/scratch /app/montage_auto/data
 
-# Expose web dashboard port
+# Expose web dashboard ports (8000: Auto-Publi, 8001: Montage Studio)
 EXPOSE 8000
+EXPOSE 8001
 
 # Healthcheck to verify the web server and scheduler are responding
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

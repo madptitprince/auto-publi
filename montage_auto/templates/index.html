@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCHEF Bourges - Studio Montage Vidéo</title>
+    <link rel="icon" type="image/png" href="/assets/logos/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand-container">
+                <div class="brand-logo-container">
+                    <img src="/assets/logos/BCHEF-ORANGE.png" alt="BCHEF" class="brand-logo-img">
+                </div>
+                <div class="brand-info">
+                    <span class="brand-name">BOURGES</span>
+                    <span class="brand-sub">STUDIO MONTAGE</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="create" id="nav-create">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    <span>Nouveau montage</span>
+                </button>
+                <button class="nav-item" data-tab="history" id="nav-history">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span>Historique</span>
+                    <span class="badge" id="history-badge">0</span>
+                </button>
+                <button class="nav-item" data-tab="rushs" id="nav-rushs">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                        <line x1="7" y1="2" x2="7" y2="22"></line>
+                        <line x1="17" y1="2" x2="17" y2="22"></line>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                    </svg>
+                    <span>Rushs bruts</span>
+                    <span class="badge" id="rushs-badge">0</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="pulse-dot"></span>
+                    <span>Gemini 3.8 Flash actif</span>
+                </div>
+                <a href="http://localhost:8000" target="_blank" class="link-external">
+                    <span>Ouvrir Plateforme Publi (Port 8000)</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        <polyline points="15 3 21 3 21 9"></polyline>
+                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Toast Notification Banner -->
+            <div id="toast" class="toast hidden"></div>
+
+            <!-- TAB 1: NOUVEAU MONTAGE -->
+            <section id="tab-create" class="tab-pane active">
+                <header class="page-header">
+                    <div>
+                        <h1 class="page-title">Créer un nouveau montage viral</h1>
+                        <p class="page-desc">Découpage intelligent, étalonnage d'image, sous-titres dynamiques et habillage sonore calibrés entre 20 et 30 secondes.</p>
+                    </div>
+                </header>
+
+                <div class="create-grid">
+                    <!-- Column 1: Rush Selection -->
+                    <div class="glass-panel selection-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">1. Sélection des rushs bruts</h2>
+                            <span class="selection-count" id="selected-counter">0 rush sélectionné</span>
+                        </div>
+
+                        <!-- Source Switcher Tabs -->
+                        <div class="pill-switcher">
+                            <button class="pill-btn active" id="btn-show-library">Rushs existants</button>
+                            <button class="pill-btn" id="btn-show-upload">Téléverser de nouveaux fichiers</button>
+                        </div>
+
+                        <!-- Mode Library -->
+                        <div id="section-library" class="rush-list-container">
+                            <div class="rush-grid" id="rushs-grid">
+                                <div class="loading-state">Chargement de la bibliothèque...</div>
+                            </div>
+                        </div>
+
+                        <!-- Mode Upload -->
+                        <div id="section-upload" class="upload-container hidden">
+                            <div class="dropzone" id="dropzone">
+                                <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                <p class="dropzone-title">Glissez vos rushs vidéo ici</p>
+                                <p class="dropzone-sub">Formats acceptés : MOV, MP4 (Format vertical 9:16 recommandé)</p>
+                                <button type="button" class="btn-secondary" id="btn-browse">Parcourir les fichiers</button>
+                                <input type="file" id="file-input" multiple accept="video/mp4,video/quicktime" class="hidden">
+                            </div>
+                            <div id="upload-status" class="upload-status-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Editing Options & Launch -->
+                    <div class="glass-panel options-panel">
+                        <div class="panel-header">
+                            <h2 class="panel-title">2. Paramètres de montage</h2>
+                        </div>
+
+                        <form id="montage-form">
+                            <!-- Duration -->
+                            <div class="form-group">
+                                <label class="form-label">Durée finale cible</label>
+                                <div class="duration-selector">
+                                    <label class="radio-chip">
+                                        <input type="radio" name="target_duration" value="20">
+                                        <span>20 secondes</span>
+                                    </label>
+                                    <label class="radio-chip">
+                                        <input type="radio" name="target_duration" value="25" checked>
+                                        <span>25 secondes (Idéal)</span>
+                                    </label>
+                                    <label class="radio-chip">
+                                        <input type="radio" name="target_duration" value="30">
+                                        <span>30 secondes</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Music Choice -->
+                            <div class="form-group">
+                                <label class="form-label" for="music_choice">Ambiance sonore & Musique</label>
+                                <select id="music_choice" name="music_choice" class="form-select">
+                                    <option value="auto">Automatique (L'IA choisit selon la scène)</option>
+                                    <option value="tension">Tension dramatique / Incident client (Discret)</option>
+                                    <option value="lofi">Lo-Fi Chill (Ambiance cuisine douce)</option>
+                                    <option value="upbeat">Beat énergique / Rythmé (Cuisine & Service)</option>
+                                    <option value="comedy">Comique / Bouncy (Moments drôles)</option>
+                                    <option value="modern">Moderne Groove (Tendance Reels)</option>
+                                    <option value="none">Sans musique (Voix naturelle seule)</option>
+                                </select>
+                            </div>
+
+                            <!-- Custom Hook Guidance -->
+                            <div class="form-group">
+                                <label class="form-label" for="custom_hook">Accroche / Hook personnalisé (Optionnel)</label>
+                                <input type="text" id="custom_hook" name="custom_hook" class="form-input" placeholder="Ex: QUAND LE CLIENT EN VEUT ENCORE PLUS" maxlength="60">
+                                <span class="form-hint">Laissez vide pour que Gemini génère l'accroche la plus virale.</span>
+                            </div>
+
+                            <!-- Hook Overlay Option (Optional, Default Unchecked) -->
+                            <div class="form-group-checkbox">
+                                <label class="checkbox-container" for="burn_hook">
+                                    <input type="checkbox" id="burn_hook" name="burn_hook">
+                                    <span class="custom-checkmark"></span>
+                                    <div class="checkbox-label-block">
+                                        <span class="checkbox-title">Incruster le titre / accroche en haut de la vidéo</span>
+                                        <span class="checkbox-hint">Désactivé par défaut. Laissez décoché si la vidéo est envoyée vers la plateforme de publication (Port 8000), celle-ci apposera son propre badge officiel lors de la programmation.</span>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <!-- Processing Features -->
+                            <div class="features-list">
+                                <div class="feature-item">
+                                    <span class="check-icon">✓</span>
+                                    <div>
+                                        <strong>Découpe dynamique intelligente</strong>
+                                        <p>Suppression des temps morts et conservation des meilleurs moments.</p>
+                                    </div>
+                                </div>
+                                <div class="feature-item">
+                                    <span class="check-icon">✓</span>
+                                    <div>
+                                        <strong>Étalonnage & Contraste pro</strong>
+                                        <p>Rehaussement des couleurs des burgers, netteté et vibrance optimisées.</p>
+                                    </div>
+                                </div>
+                                <div class="feature-item">
+                                    <span class="check-icon">✓</span>
+                                    <div>
+                                        <strong>Sous-titres officiels BCHEF (R41 Étoile)</strong>
+                                        <p>Transcription fidèle incrustée avec la typographie officielle de la marque.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn-primary" id="btn-submit-montage">
+                                <span>Lancer le montage automatique</span>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    <polyline points="12 5 19 12 12 19"></polyline>
+                                </svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Live Progress Card -->
+                <div id="progress-card" class="glass-panel progress-card hidden">
+                    <div class="progress-header">
+                        <div class="spinner"></div>
+                        <div>
+                            <h3 class="progress-title" id="progress-status-text">Traitement en cours...</h3>
+                            <p class="progress-sub" id="progress-step-text">Initialisation de l'analyse multimodale...</p>
+                        </div>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill" id="progress-bar-fill" style="width: 5%;"></div>
+                    </div>
+                    <div class="progress-percentage" id="progress-pct">5%</div>
+                </div>
+
+                <!-- Finished Result Card -->
+                <div id="result-card" class="glass-panel result-card hidden">
+                    <div class="result-header">
+                        <span class="tag-success">Montage prêt pour publication</span>
+                        <h2 class="result-title" id="result-hook">TITRE DU MONTAGE</h2>
+                    </div>
+
+                    <div class="result-layout">
+                        <!-- Video Player Preview -->
+                        <div class="video-preview-wrapper">
+                            <video id="result-video" controls playsinline preload="metadata">
+                                <source src="" type="video/mp4">
+                                Votre navigateur ne supporte pas la lecture vidéo.
+                            </video>
+                        </div>
+
+                        <!-- Result Details & Actions -->
+                        <div class="result-details">
+                            <div class="detail-block">
+                                <label class="detail-label">Description générée pour les réseaux :</label>
+                                <p class="detail-text" id="result-desc"></p>
+                            </div>
+
+                            <div class="detail-block">
+                                <label class="detail-label">Hashtags suggérés :</label>
+                                <div class="tags-container" id="result-hashtags"></div>
+                            </div>
+
+                            <div class="detail-block">
+                                <label class="detail-label">Informations techniques :</label>
+                                <div class="meta-row">
+                                    <span class="meta-pill" id="result-duration">Durée : 0s</span>
+                                    <span class="meta-pill" id="result-format">Format : 1080x1920 (9:16)</span>
+                                </div>
+                            </div>
+
+                            <div class="result-actions">
+                                <a id="btn-download-result" href="#" download class="btn-secondary">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    <span>Télécharger la vidéo</span>
+                                </a>
+
+                                <button id="btn-send-queue" class="btn-primary">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                                    </svg>
+                                    <span>Envoyer vers la file d'attente (Port 8000)</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: HISTORIQUE -->
+            <section id="tab-history" class="tab-pane hidden">
+                <header class="page-header">
+                    <div>
+                        <h1 class="page-title">Historique des montages réalisés</h1>
+                        <p class="page-desc">Consultez, téléchargez ou republiez tous vos montages terminés.</p>
+                    </div>
+                </header>
+
+                <div id="history-container" class="history-grid">
+                    <div class="loading-state">Chargement de l'historique...</div>
+                </div>
+            </section>
+
+            <!-- TAB 3: RUSHS BRUTS -->
+            <section id="tab-rushs" class="tab-pane hidden">
+                <header class="page-header">
+                    <div>
+                        <h1 class="page-title">Bibliothèque de rushs bruts</h1>
+                        <p class="page-desc">Tous les fichiers vidéos enregistrés et prêts à être montés.</p>
+                    </div>
+                </header>
+
+                <div id="raw-rushs-container" class="rushs-table-container glass-panel">
+                    <div class="loading-state">Chargement des rushs...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

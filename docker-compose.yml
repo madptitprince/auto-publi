@@ -24,3 +24,28 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  bchef-montage-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bchef-montage-studio
+    command: ["uvicorn", "montage_auto.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Paris
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./montage_auto:/app/montage_auto
+      - ./assets:/app/assets
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
