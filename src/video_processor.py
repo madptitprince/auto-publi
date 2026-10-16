@@ -52,9 +52,9 @@ def get_hook_font(font_size: int) -> ImageFont.FreeTypeFont:
 def create_hook_badge(
     text: str,
     output_path: Path,
-    video_width: int = 1440,
-    video_height: int = 2560,
-    font_size: int = 46,
+    video_width: int = 1080,
+    video_height: int = 1920,
+    font_size: int = 38,
 ) -> Path:
     """
     Creates a clean, high-contrast white card hook badge.
@@ -65,8 +65,8 @@ def create_hook_badge(
     actual_font_size = int(font_size * scale)
     font = get_hook_font(actual_font_size)
 
-    # Word wrap
-    max_text_width = int(video_width * 0.78)
+    # Word wrap - max 72% of width so it never touches screen edges
+    max_text_width = int(video_width * 0.72)
     words = text.split()
     lines = []
     current_line = []
@@ -87,8 +87,8 @@ def create_hook_badge(
         lines.append(" ".join(current_line))
 
     line_height = int(actual_font_size * 1.38)
-    padding_x = int(48 * scale)
-    padding_y = int(30 * scale)
+    padding_x = int(36 * scale)
+    padding_y = int(22 * scale)
 
     max_line_w = 0
     for line in lines:
@@ -105,14 +105,14 @@ def create_hook_badge(
     shadow_offset = int(4 * scale)
     draw.rounded_rectangle(
         [shadow_offset, shadow_offset, badge_w - 2, badge_h - 2],
-        radius=int(20 * scale),
+        radius=int(16 * scale),
         fill=(0, 0, 0, 75),
     )
 
     # Clean white background card with refined border
     draw.rounded_rectangle(
         [0, 0, badge_w - shadow_offset - 2, badge_h - shadow_offset - 2],
-        radius=int(20 * scale),
+        radius=int(16 * scale),
         fill=(255, 255, 255, 252),
         outline=(230, 232, 240),
         width=int(2 * scale),
@@ -131,21 +131,38 @@ def create_hook_badge(
 
 
 def get_video_dimensions(video_path: Path) -> tuple[int, int]:
-    """Retrieve video resolution (width, height) using ffprobe."""
+    """Retrieve visual display resolution (width, height) using ffprobe, accounting for rotation."""
     try:
         cmd = [
             "ffprobe",
             "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=width,height",
+            "-show_entries", "stream=width,height:stream_tags=rotate:stream_side_data=rotation",
             "-of", "json",
             str(video_path),
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(result.stdout)
         streams = data.get("streams", [])
-        if streams and "width" in streams[0] and "height" in streams[0]:
-            return int(streams[0]["width"]), int(streams[0]["height"])
+        if streams:
+            st = streams[0]
+            w = int(st.get("width", 1080))
+            h = int(st.get("height", 1920))
+            rot = 0
+            if "tags" in st and "rotate" in st["tags"]:
+                try:
+                    rot = int(float(st["tags"]["rotate"]))
+                except Exception:
+                    pass
+            for sd in st.get("side_data_list", []):
+                if "rotation" in sd:
+                    try:
+                        rot = int(float(sd["rotation"]))
+                    except Exception:
+                        pass
+            if abs(rot) in (90, 270):
+                w, h = h, w
+            return w, h
     except Exception as e:
         print(f"Erreur lecture dimensions video {video_path}: {e}")
     return 1080, 1920
@@ -160,31 +177,37 @@ def process_video_with_hook(
 ) -> dict:
     """
     Overlays a clean white hook badge on top of the video (until the end by default).
-    Outputs an Instagram Reel & TikTok compliant MP4.
+    Outputs an Instagram Reel & TikTok compliant MP4 in 1080x1920.
     """
     if not input_video.exists():
         raise FileNotFoundError(f"Video introuvable: {input_video}")
 
     hook_text = hook_text.upper().strip()
-    width, height = get_video_dimensions(input_video)
+
+    # Normalisation au format standard vertical 1080x1920 (9:16)
+    target_w = 1080
+    target_h = 1920
 
     badge_path = Path("/tmp") / f"badge_{input_video.stem}.png"
-    create_hook_badge(hook_text, badge_path, width, height)
+    create_hook_badge(hook_text, badge_path, target_w, target_h, font_size=38)
 
     if not output_filename:
         output_filename = f"processed_{input_video.stem}.mp4"
 
     output_path = PROCESSED_VIDEOS_DIR / output_filename
 
-    # FFmpeg command: overlay badge at y = height * y_ratio
-    # If hook_duration is specified, show for that duration; otherwise stay until the end of video
+    # FFmpeg command: mise a l'echelle 1080x1920 puis incrustation du badge
+    scale_filter = (
+        f"[0:v]scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
+        f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black[bg]"
+    )
     if hook_duration is not None and hook_duration > 0:
         filter_expr = (
-            f"[0:v][1:v]overlay=(W-w)/2:H*{y_ratio}:enable='between(t,0,{hook_duration})'[outv]"
+            f"{scale_filter};[bg][1:v]overlay=(W-w)/2:H*{y_ratio}:enable='between(t,0,{hook_duration})'[outv]"
         )
     else:
         filter_expr = (
-            f"[0:v][1:v]overlay=(W-w)/2:H*{y_ratio}[outv]"
+            f"{scale_filter};[bg][1:v]overlay=(W-w)/2:H*{y_ratio}[outv]"
         )
 
     cmd = [
@@ -196,7 +219,7 @@ def process_video_with_hook(
         "-map", "0:a?",
         "-c:v", "libx264",
         "-preset", "faster",
-        "-crf", "19",
+        "-crf", "21",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-b:a", "192k",
@@ -227,6 +250,6 @@ def process_video_with_hook(
         "cover_image": str(cover_path),
         "hook_text": hook_text,
         "duration": hook_duration,
-        "width": width,
-        "height": height,
+        "width": target_w,
+        "height": target_h,
     }
