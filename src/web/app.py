@@ -473,7 +473,7 @@ async def trigger_publish(
             res = run_daily_publication(
                 is_simulation=is_sim,
                 custom_video_name=v_name if v_name else None,
-                custom_hook=c_hook.strip() if c_hook and c_hook.strip() else None,
+                custom_hook=c_hook.upper().strip() if c_hook and c_hook.strip() else None,
                 custom_description=c_desc.strip() if c_desc and c_desc.strip() else None,
                 custom_hashtags=c_tags,
                 force_publish=is_force,

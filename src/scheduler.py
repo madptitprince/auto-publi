@@ -244,7 +244,7 @@ def run_daily_publication(
         if custom_hook and custom_description:
             if progress_callback:
                 progress_callback("Utilisation des textes personnalises...", 50)
-            hook_text = custom_hook
+            hook_text = custom_hook.upper().strip()
             caption_line = custom_description
             hashtags_list = custom_hashtags if custom_hashtags else ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"]
             ai_data = {
@@ -257,7 +257,7 @@ def run_daily_publication(
         else:
             if progress_callback:
                 progress_callback("Reutilisation des textes verrouilles a minuit...", 50)
-            hook_text = today_preview.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !")
+            hook_text = today_preview.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !").upper().strip()
             caption_line = today_preview.get("description", "Rejoignez-nous chez BCHEF Bourges au 13 place Gordaine !")
             hashtags_list = today_preview.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
             ai_data = {
@@ -460,7 +460,7 @@ def generate_daily_preview(target_date: datetime.date | None = None, force: bool
         except Exception as e_cache:
             print(f"Erreur sauvegarde cache IA : {e_cache}")
 
-    hook_text = ai_data.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !")
+    hook_text = ai_data.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !").upper().strip()
     caption_line = ai_data.get("description", "Rejoignez-nous chez BCHEF Bourges au 13 place Gordaine !")
     hashtags_list = ai_data.get("hashtags", ["#bchef", "#bourges", "#burger", "#restobourges", "#foodie"])
 

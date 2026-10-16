@@ -59,6 +59,7 @@ def create_hook_badge(
     Creates a clean, high-contrast white card hook badge.
     Modern TikTok / Reels aesthetic: white card, dark bold typography, clean drop shadow.
     """
+    text = text.upper().strip()
     scale = video_width / 1080.0
     actual_font_size = int(font_size * scale)
     font = get_hook_font(actual_font_size)
@@ -157,6 +158,7 @@ def process_video_with_hook(
     if not input_video.exists():
         raise FileNotFoundError(f"Video introuvable: {input_video}")
 
+    hook_text = hook_text.upper().strip()
     width, height = get_video_dimensions(input_video)
 
     badge_path = Path("/tmp") / f"badge_{input_video.stem}.png"

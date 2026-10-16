@@ -79,27 +79,12 @@ def generate_daily_story(
     x = (width - tw) // 2
     y = int(1115 * (height / 1920.0))
 
-    # Text shadow outline for 100% legibility on any burger photo
-    shadow_color = (0, 0, 0, 200)
-    offsets = [(-3, -3), (3, -3), (-3, 3), (3, 3), (0, 4), (4, 0), (0, -4), (-4, 0)]
-    for ox, oy in offsets:
-        draw.text(
-            (x + int(ox * scale), y + int(oy * scale)),
-            hours_text,
-            font=font_hours,
-            fill=shadow_color,
-            stroke_width=int(2 * scale),
-            stroke_fill=shadow_color,
-        )
-
-    # Pure extra bold white text
+    # Pure white text without contours or outlines
     draw.text(
         (x, y),
         hours_text,
         font=font_hours,
         fill=(255, 255, 255, 255),
-        stroke_width=int(2 * scale),
-        stroke_fill=(255, 255, 255, 255),
     )
 
     final_img = Image.alpha_composite(base_img, overlay).convert("RGB")
