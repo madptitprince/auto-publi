@@ -52,6 +52,16 @@ from src.ai_analyzer import analyze_video_with_gemini
 
 app = FastAPI(title="BCHEF Bourges - Automatisation")
 
+_PREVIEW_LOCK = threading.Lock()
+_PREVIEW_THREAD = None
+
+def trigger_preview_generation():
+    global _PREVIEW_THREAD
+    with _PREVIEW_LOCK:
+        if _PREVIEW_THREAD is None or not _PREVIEW_THREAD.is_alive():
+            _PREVIEW_THREAD = threading.Thread(target=generate_daily_preview, daemon=True)
+            _PREVIEW_THREAD.start()
+
 STATIC_DIR = BASE_DIR / "src" / "web" / "static"
 TEMPLATES_DIR = BASE_DIR / "src" / "web" / "templates"
 
@@ -220,16 +230,14 @@ async def dashboard(request: Request):
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     today_preview = get_today_preview()
 
-    # Si l'aperçu du jour n'a pas encore été généré pour aujourd'hui, le préparer
+    # Si l'aperçu du jour n'a pas encore été généré pour aujourd'hui, le déclencher en tâche de fond
     if not today_preview or today_preview.get("date") != today_str:
-        try:
-            today_preview = generate_daily_preview()
-        except Exception as e_prev:
-            print(f"Erreur préparation aperçu aujourd'hui : {e_prev}")
+        trigger_preview_generation()
 
     latest_story = None
     latest_story_video = None
     latest_video = None
+    latest_report = history[0] if history else None
     is_today_published = False
 
     if today_preview and today_preview.get("date") == today_str:
