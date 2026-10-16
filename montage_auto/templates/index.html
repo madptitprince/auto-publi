@@ -116,8 +116,15 @@
 
                         <!-- Source Switcher Tabs -->
                         <div class="pill-switcher">
-                            <button class="pill-btn active" id="btn-show-library">Rushs existants</button>
-                            <button class="pill-btn" id="btn-show-upload">Téléverser de nouveaux fichiers</button>
+                            <button class="pill-btn active" id="btn-show-library">
+                                <svg class="pill-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+                                <span>Rushs existants</span>
+                            </button>
+                            <button class="pill-btn" id="btn-show-upload">
+                                <svg class="pill-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <span class="pill-text-desktop">Téléverser de nouveaux fichiers</span>
+                                <span class="pill-text-mobile">Téléverser</span>
+                            </button>
                         </div>
 
                         <!-- Mode Library -->
@@ -157,15 +164,18 @@
                                 <div class="duration-selector">
                                     <label class="radio-chip">
                                         <input type="radio" name="target_duration" value="20">
-                                        <span>20 secondes</span>
+                                        <span class="chip-desktop">20 secondes</span>
+                                        <span class="chip-mobile">20s</span>
                                     </label>
                                     <label class="radio-chip">
                                         <input type="radio" name="target_duration" value="25" checked>
-                                        <span>25 secondes (Idéal)</span>
+                                        <span class="chip-desktop">25 secondes (Idéal)</span>
+                                        <span class="chip-mobile">25s (Idéal)</span>
                                     </label>
                                     <label class="radio-chip">
                                         <input type="radio" name="target_duration" value="30">
-                                        <span>30 secondes</span>
+                                        <span class="chip-desktop">30 secondes</span>
+                                        <span class="chip-mobile">30s</span>
                                     </label>
                                 </div>
                             </div>
