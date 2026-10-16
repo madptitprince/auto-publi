@@ -72,31 +72,113 @@ tar --exclude='.venv' \
     --exclude='montage_auto/rushs/**/*.mov' \
     --exclude='montage_auto/rushs/**/*.mp4' \
     --exclude='montage_auto/data/history.json' \
+    --exclude='.env' \
     --exclude='*.log' \
     -czf - . | ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" "$VPS_USER@$VPS_IP" "tar -xzf - -C ~/auto-publi"
 
-# 4. Lancement des conteneurs Docker avec docker compose
-echo "[4/4] Démarrage des conteneurs en arrière-plan..."
+# 4. Lancement des conteneurs Docker avec docker compose et configuration Nginx
+echo "[4/4] Configuration Nginx et démarrage des conteneurs en arrière-plan..."
 ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" "$VPS_USER@$VPS_IP" "bash -s" << 'EOF'
   cd ~/auto-publi
-  # Configuration du pare-feu local Ubuntu si actif
+  if [ ! -f .env ]; then
+    cp .env.example .env 2>/dev/null || touch .env
+  fi
+
+  # Configuration du port de binding interne pour le Studio (proxy Nginx sur 8001)
+  if ! grep -q "MONTAGE_PORT_BIND" .env; then
+    echo "MONTAGE_PORT_BIND=127.0.0.1:8002" >> .env
+  else
+    sed -i 's/^MONTAGE_PORT_BIND=.*/MONTAGE_PORT_BIND=127.0.0.1:8002/' .env
+  fi
+
+  # Configuration pare-feu Ubuntu
   if command -v ufw &> /dev/null; then
+    sudo ufw allow 80/tcp || true
+    sudo ufw allow 443/tcp || true
     sudo ufw allow 8000/tcp || true
     sudo ufw allow 8001/tcp || true
     sudo ufw allow 22/tcp || true
   fi
+
+  # Configuration Nginx avec SSL pour Auto-Publi (443) et Montage Studio (8001)
+  if [ -f /etc/letsencrypt/live/bchef.duckdns.org/fullchain.pem ]; then
+    sudo tee /etc/nginx/sites-available/default > /dev/null << 'NGINX_CONF'
+server {
+    listen [::]:443 ssl;
+    listen 443 ssl;
+    server_name bchef.duckdns.org;
+    client_max_body_size 500M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+    }
+
+    ssl_certificate /etc/letsencrypt/live/bchef.duckdns.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/bchef.duckdns.org/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    listen [::]:8001 ssl;
+    listen 8001 ssl;
+    server_name bchef.duckdns.org;
+    client_max_body_size 500M;
+
+    error_page 497 https://$host:8001$request_uri;
+
+    location / {
+        proxy_pass http://127.0.0.1:8002;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+    }
+
+    ssl_certificate /etc/letsencrypt/live/bchef.duckdns.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/bchef.duckdns.org/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    if ($host = bchef.duckdns.org) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name bchef.duckdns.org;
+    return 404;
+}
+NGINX_CONF
+    sudo nginx -t && sudo systemctl reload nginx
+  fi
+
   # Lancement Docker Compose (Auto-Publi + Montage Studio)
   sudo docker compose down || true
   sudo docker compose up -d --build
   echo "Attente de l'initialisation des serveurs..."
-  sleep 8
+  sleep 6
   sudo docker compose ps
 EOF
 
 echo ""
 echo "============================================================"
 echo "  DÉPLOIEMENT TERMINÉ AVEC SUCCÈS !"
-echo "  Tableau de bord Publication : http://$VPS_IP:8000"
-echo "  Studio de Montage Vidéo      : http://$VPS_IP:8001"
+echo "  Tableau de bord Publication : https://bchef.duckdns.org"
+echo "  Studio de Montage Vidéo      : https://bchef.duckdns.org:8001"
 echo "  Publication quotidienne active : 11h30 (Europe/Paris)"
 echo "============================================================"

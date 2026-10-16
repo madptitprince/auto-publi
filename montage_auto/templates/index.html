@@ -56,8 +56,8 @@
                     <span class="pulse-dot"></span>
                     <span>Gemini 3.8 Flash actif</span>
                 </div>
-                <a href="http://localhost:8000" target="_blank" class="link-external">
-                    <span>Ouvrir Plateforme Publi (Port 8000)</span>
+                <a href="#" id="link-to-publi" class="link-external" onclick="const p = window.location.protocol; const h = window.location.hostname; const target = (p === 'https:' || h !== 'localhost') ? p + '//' + h : 'http://localhost:8000'; window.open(target, '_blank'); return false;">
+                    <span>Ouvrir Plateforme Publi</span>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                         <polyline points="15 3 21 3 21 9"></polyline>
