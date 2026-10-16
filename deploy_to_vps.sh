@@ -101,7 +101,7 @@ ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" "$VPS_USER@$VPS_IP" "bash -s" << '
   fi
 
   # Configuration Nginx avec SSL pour Auto-Publi (443) et Montage Studio (8001)
-  if [ -f /etc/letsencrypt/live/bchef.duckdns.org/fullchain.pem ]; then
+  if sudo test -f /etc/letsencrypt/live/bchef.duckdns.org/fullchain.pem; then
     sudo tee /etc/nginx/sites-available/default > /dev/null << 'NGINX_CONF'
 server {
     listen [::]:443 ssl;
