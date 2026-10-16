@@ -34,6 +34,88 @@ class TikTokPublisher:
         else:
             self.cookies_path = TIKTOK_COOKIES_FILE
 
+    def _dismiss_modals(self, page):
+        """Ferme ou neutralise les modales, tutoriels et popups dans TikTok Studio."""
+        # 1. Echap au clavier pour fermer les dialogues standards
+        try:
+            page.keyboard.press("Escape")
+            time.sleep(0.3)
+        except Exception:
+            pass
+
+        # 2. Boutons d'action usuels des modales et alertes
+        dismiss_texts = [
+            "J'ai compris",
+            "Got it",
+            "OK",
+            "Ok",
+            "D'accord",
+            "Fermer",
+            "Close",
+            "Continuer",
+            "Continue",
+            "Activer",
+            "Autoriser",
+            "Non merci",
+            "Plus tard",
+            "Not now",
+            "Ignorer",
+            "Accepter",
+            "Suivant",
+            "Next",
+            "Compris",
+        ]
+        for txt in dismiss_texts:
+            try:
+                btns = page.locator(
+                    f'div[role="dialog"] button:has-text("{txt}"), '
+                    f'.TUXModal button:has-text("{txt}"), '
+                    f'[data-floating-ui-portal] button:has-text("{txt}")'
+                )
+                cnt = btns.count()
+                for i in range(min(cnt, 2)):
+                    b = btns.nth(i)
+                    if b.is_visible():
+                        b.click(timeout=1000, force=True)
+                        time.sleep(0.3)
+            except Exception:
+                pass
+
+        # 3. Icones ou croix de fermeture
+        try:
+            close_btns = page.locator(
+                '[data-floating-ui-portal] button[aria-label*="close" i], '
+                '[data-floating-ui-portal] button[aria-label*="fermer" i], '
+                '.TUXModal-close, '
+                'div[role="dialog"] button[aria-label*="close" i], '
+                'div[role="dialog"] button[aria-label*="fermer" i]'
+            )
+            for i in range(min(close_btns.count(), 2)):
+                cb = close_btns.nth(i)
+                if cb.is_visible():
+                    cb.click(timeout=1000, force=True)
+                    time.sleep(0.3)
+        except Exception:
+            pass
+
+        # 4. Suppression DOM en dernier recours des overlays bloquants
+        try:
+            page.evaluate('''() => {
+                const portals = document.querySelectorAll(
+                    '[data-floating-ui-portal], .TUXModal-overlay, .TUXModal'
+                );
+                portals.forEach(p => {
+                    const hasEditor = p.querySelector('div[contenteditable="true"]');
+                    const hasFileInput = p.querySelector('input[type="file"]');
+                    const hasPublish = p.querySelector('button[type="submit"]') || p.innerText.includes('Publier');
+                    if (!hasEditor && !hasFileInput && !hasPublish) {
+                        p.remove();
+                    }
+                });
+            }''')
+        except Exception:
+            pass
+
     def publish_video(
         self,
         video_path: Path,
@@ -41,9 +123,9 @@ class TikTokPublisher:
         simulation: bool = True,
         location_query: str = "BCHEF Bourges",
     ) -> dict:
-        """Publishes a video to TikTok via automated browser session."""
+        """Publie une video sur TikTok via session de navigateur automatisee."""
         if not video_path.exists():
-            raise FileNotFoundError(f"Vidéo TikTok introuvable : {video_path}")
+            raise FileNotFoundError(f"Video TikTok introuvable : {video_path}")
 
         cookies_file = Path(self.cookies_path)
         has_cookies = cookies_file.exists()
@@ -57,7 +139,7 @@ class TikTokPublisher:
                 "caption": caption,
                 "location": location_query,
                 "message": (
-                    "Vidéo TikTok prête et validée (Mode simulation ou session cookies non configurée). "
+                    "Video TikTok prete et validee (Mode simulation ou session cookies non configuree). "
                     f"Session attendue dans {self.cookies_path}."
                 ),
             }
@@ -67,9 +149,11 @@ class TikTokPublisher:
                 "platform": "tiktok",
                 "type": "video",
                 "status": "error",
-                "error": "Playwright n'est pas installé dans l'environnement Python.",
+                "error": "Playwright n'est pas installe dans l'environnement Python.",
             }
 
+        browser = None
+        page = None
         try:
             with open(cookies_file, "r", encoding="utf-8") as f:
                 cookies = json.load(f)
@@ -92,68 +176,118 @@ class TikTokPublisher:
                 )
                 context.add_cookies(cookies)
                 page = context.new_page()
-                page.goto("https://www.tiktok.com/tiktokstudio/upload", wait_until="domcontentloaded")
-                time.sleep(4)
 
-                # Set video file
-                file_input = page.locator('input[type="file"]')
+                # 1. Navigation vers TikTok Studio
+                page.goto("https://www.tiktok.com/tiktokstudio/upload", wait_until="domcontentloaded")
+                time.sleep(5)
+                self._dismiss_modals(page)
+
+                # 2. Selection du fichier video
+                file_input = page.locator('input[type="file"]').first
+                try:
+                    file_input.wait_for(state="attached", timeout=15000)
+                except Exception:
+                    pass
+
+                self._dismiss_modals(page)
                 file_input.set_input_files(resolved_video_path)
 
-                # Wait for upload processing
-                time.sleep(8)
+                # 3. Attente dynamique de televersement et d'apparition de l'editeur
+                editor = page.locator('div[contenteditable="true"]').first
+                video_ready = False
+                for _ in range(30):
+                    time.sleep(2)
+                    self._dismiss_modals(page)
+                    if editor.count() > 0 and editor.is_visible():
+                        video_ready = True
+                        break
 
-                # Dismiss modals if present
-                for btn_text in ["Activer", "J'ai compris", "Autoriser"]:
+                if not video_ready:
+                    time.sleep(5)
+                    self._dismiss_modals(page)
+
+                # 4. Remplissage de la legende avec click force anti-interception
+                self._dismiss_modals(page)
+                if editor.count() > 0:
                     try:
-                        modal_btn = page.locator(f'button:has-text("{btn_text}")')
-                        if modal_btn.count() > 0:
-                            modal_btn.first.click(timeout=2000)
-                            time.sleep(1)
+                        editor.click(force=True, timeout=5000)
                     except Exception:
                         pass
-
-                # Fill caption
-                editor = page.locator('div[contenteditable="true"]').first
-                if editor.count() > 0:
-                    editor.click()
+                    time.sleep(0.5)
                     page.keyboard.press("Control+A")
                     page.keyboard.press("Backspace")
-                    editor.fill(caption)
+                    time.sleep(0.5)
+                    try:
+                        page.keyboard.insert_text(caption)
+                    except Exception:
+                        try:
+                            editor.fill(caption)
+                        except Exception:
+                            page.keyboard.type(caption, delay=15)
 
                 time.sleep(1)
+                self._dismiss_modals(page)
 
-                # Location selection (BCHEF Bourges)
-                try:
-                    loc_box = page.locator('*:has-text("Rechercher des lieux")').last
-                    if loc_box.count() > 0:
-                        loc_box.click(timeout=2000)
-                        time.sleep(1)
-                        page.keyboard.type(location_query)
-                        time.sleep(2)
-                        first_loc_item = page.locator('div[role="listbox"] div, ul li, .location-item').first
-                        if first_loc_item.count() > 0:
-                            first_loc_item.click(timeout=2000)
-                except Exception as e_loc:
-                    print(f"Lieu TikTok non appliqué : {e_loc}")
+                # 5. Selection du lieu (BCHEF Bourges)
+                if location_query:
+                    try:
+                        loc_box = page.locator('*:has-text("Rechercher des lieux")').last
+                        if loc_box.count() > 0:
+                            loc_box.click(timeout=3000, force=True)
+                            time.sleep(1)
+                            page.keyboard.type(location_query)
+                            time.sleep(2)
+                            first_loc_item = page.locator('div[role="listbox"] div, ul li, .location-item').first
+                            if first_loc_item.count() > 0:
+                                first_loc_item.click(timeout=3000, force=True)
+                    except Exception as e_loc:
+                        print(f"Lieu TikTok non applique : {e_loc}")
 
                 time.sleep(2)
+                self._dismiss_modals(page)
 
-                # Click Publish button
+                # 6. Clic sur le bouton Publier
                 publish_btn = page.locator('button:has-text("Publier")').first
-                if publish_btn.count() > 0:
-                    publish_btn.click()
-                    time.sleep(2)
+                if publish_btn.count() == 0:
+                    publish_btn = page.locator('button:has-text("Post")').first
 
-                    # Handle secondary 'Publier maintenant' confirmation if present
+                if publish_btn.count() > 0:
+                    # Attente que les verifications TikTok se terminent
+                    for _ in range(15):
+                        self._dismiss_modals(page)
+                        if publish_btn.is_enabled():
+                            break
+                        time.sleep(2)
+
+                    publish_btn.click(force=True, timeout=5000)
+                    time.sleep(3)
+
+                    # Gestion des confirmations secondaires
+                    for confirm_txt in [
+                        "Publier maintenant",
+                        "Post now",
+                        "Ignorer et publier",
+                        "Post anyway",
+                        "Continuer la publication",
+                        "Confirmer",
+                        "J'ai compris",
+                    ]:
+                        try:
+                            confirm_btn = page.locator(f'button:has-text("{confirm_txt}")')
+                            if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
+                                confirm_btn.first.click(timeout=3000, force=True)
+                                time.sleep(2)
+                        except Exception:
+                            pass
+
+                    # Attente de validation finale
+                    time.sleep(8)
+                    screenshot_path = DATA_DIR / "tiktok_last_success.png"
                     try:
-                        pub_now = page.locator('button:has-text("Publier maintenant")')
-                        if pub_now.count() > 0:
-                            pub_now.first.click(timeout=3000)
+                        page.screenshot(path=str(screenshot_path))
                     except Exception:
                         pass
 
-                    # Wait for redirect to content list
-                    time.sleep(6)
                     browser.close()
                     return {
                         "platform": "tiktok",
@@ -164,18 +298,52 @@ class TikTokPublisher:
                         "location": location_query,
                     }
                 else:
+                    err_screenshot = DATA_DIR / "tiktok_error_no_btn.png"
+                    try:
+                        page.screenshot(path=str(err_screenshot))
+                    except Exception:
+                        pass
                     browser.close()
                     return {
                         "platform": "tiktok",
                         "type": "video",
                         "status": "error",
-                        "error": "Bouton de publication TikTok non trouvé sur la page.",
+                        "error": "Bouton de publication TikTok non trouve sur la page.",
                     }
 
         except Exception as e:
+            err_screenshot = DATA_DIR / "tiktok_last_error.png"
+            try:
+                if page:
+                    page.screenshot(path=str(err_screenshot))
+            except Exception:
+                pass
+            if browser:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
             return {
                 "platform": "tiktok",
                 "type": "video",
                 "status": "error",
                 "error": str(e),
             }
+
+
+def publish_single_tiktok(
+    video_path: str | Path,
+    caption: str,
+    target_profile: str = "official",
+    simulation: bool = False,
+    location_query: str = "BCHEF Bourges",
+) -> dict:
+    """Helper direct pour publier une video sur TikTok sans passer par le pipeline complet."""
+    publisher = TikTokPublisher(target_profile=target_profile)
+    return publisher.publish_video(
+        video_path=Path(video_path),
+        caption=caption,
+        simulation=simulation,
+        location_query=location_query,
+    )
+

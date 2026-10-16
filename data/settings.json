@@ -1,11 +1,22 @@
 {
   "opening_hours": {
-    "Monday": "11h00 - 22h45",
-    "Tuesday": "11h00 - 22h45",
-    "Wednesday": "11h00 - 22h45",
-    "Thursday": "11h00 - 22h45",
+    "Monday": "11h00 - 22h30",
+    "Tuesday": "11h00 - 22h30",
+    "Wednesday": "11h00 - 22h30",
+    "Thursday": "11h00 - 22h30",
     "Friday": "11h00 - 23h30",
     "Saturday": "11h00 - 23h30",
     "Sunday": "11h30 - 22h00"
+  },
+  "active_profile": "official",
+  "profiles": {
+    "test": {
+      "instagram_username": "test_publi00",
+      "instagram_password": "mad1234"
+    },
+    "official": {
+      "instagram_username": "bchef_bourges",
+      "instagram_password": "Dreadneal1989"
+    }
   }
 }

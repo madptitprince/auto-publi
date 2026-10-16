@@ -509,30 +509,36 @@ scheduler = BackgroundScheduler()
 
 
 def start_scheduler():
-    """Starts the daily 00:01 preview preparation and 11:30 publication schedule."""
+    """Demarre la pre-generation quotidienne a 00:01 et la publication a 11:30."""
+    if os.getenv("DISABLE_AUTO_SCHEDULER", "false").lower() in ("true", "1", "yes"):
+        print("Planificateur automatique desactive via DISABLE_AUTO_SCHEDULER.")
+        return
+
     if not scheduler.running:
-        # 1. Preview preparation every night at 00:01 Paris time
+        default_simulation = os.getenv("SIMULATION_MODE", "false").lower() in ("true", "1", "yes")
+
+        # 1. Preparation de l'apercu chaque nuit a 00:01 heure de Paris
         scheduler.add_job(
             func=generate_daily_preview,
             trigger=CronTrigger(hour=0, minute=1, timezone="Europe/Paris"),
             id="daily_bchef_preview",
-            name="Pré-génération quotidienne de l'aperçu BCHEF",
+            name="Pre-generation quotidienne de l'apercu BCHEF",
             replace_existing=True,
         )
 
-        # 2. Daily publication at 11:30 Paris time
+        # 2. Publication quotidienne a 11:30 heure de Paris
         scheduler.add_job(
             func=run_daily_publication,
             trigger=CronTrigger(hour=11, minute=30, timezone="Europe/Paris"),
             id="daily_bchef_publication",
             name="Publication quotidienne BCHEF Bourges",
             replace_existing=True,
-            kwargs={"is_simulation": False},
+            kwargs={"is_simulation": default_simulation},
         )
         scheduler.start()
-        print("Planificateur activé :")
-        print(" - Pré-génération de l'aperçu du jour chaque nuit à 00h01 (Paris).")
-        print(" - Publication automatique chaque jour à 11h30 (Paris).")
+        print("Planificateur active :")
+        print(" - Pre-generation de l'apercu du jour chaque nuit a 00h01 (Paris).")
+        print(f" - Publication automatique chaque jour a 11h30 (Paris, simulation={default_simulation}).")
 
 
 if __name__ == "__main__":
