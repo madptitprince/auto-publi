@@ -1,10 +1,136 @@
 import os
+import json
+import re
+import time
 import subprocess
 import tempfile
 import uuid
 from pathlib import Path
+from pydantic import BaseModel, Field
+from google import genai
+from google.genai import types
 
-from montage_auto.config import FONTS_DIR, MUSIC_DIR, TEMP_DIR
+from montage_auto.config import GEMINI_API_KEY, FONTS_DIR, MUSIC_DIR, TEMP_DIR
+
+
+class SubtitleCueItem(BaseModel):
+    start: float = Field(description="Horodatage exact de debut en secondes (float, ex: 1.35)")
+    end: float = Field(description="Horodatage exact de fin en secondes (float, ex: 2.10)")
+    text: str = Field(description="Texte court de 2 a 4 mots maximum en majuscules sans emoji")
+
+
+class AlignedAudioTranscription(BaseModel):
+    has_speech: bool = Field(description="True si des voix humaines sont audibles, False sinon")
+    cues: list[SubtitleCueItem] = Field(description="Sequences chronologiques de sous-titres parfaitement synchronisees")
+
+
+def get_video_duration(path: Path) -> float:
+    """Uses ffprobe to obtain video duration in seconds."""
+    try:
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if res.returncode == 0 and res.stdout.strip():
+            return round(float(res.stdout.strip()), 2)
+    except Exception:
+        pass
+    return 25.0
+
+
+def align_subtitles_to_audio(
+    audio_path: Path,
+    api_key: str | None = None,
+    target_duration: float = 25.0,
+) -> list[dict]:
+    """
+    Direct multimodal audio speech-to-text alignment.
+    Transcribes the exact assembled audio track with surgical timestamps (start, end)
+    perfectly synced to the tempo of spoken dialogue.
+    """
+    active_key = api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
+    if not active_key:
+        print("[Subtitles] Aucune clef Gemini configuree pour l'alignement audio.")
+        return []
+
+    try:
+        client = genai.Client(api_key=active_key)
+        f_ref = client.files.upload(file=str(audio_path))
+
+        waited = 0
+        while f_ref.state.name == "PROCESSING" and waited < 30:
+            time.sleep(1)
+            waited += 1
+            f_ref = client.files.get(name=f_ref.name)
+
+        prompt = (
+            "Tu es un expert en synchronisation audio/sous-titres pour des videos virales TikTok/Reels. "
+            f"Cet extrait audio final dure {round(target_duration, 1)} secondes. "
+            "Consignes de tempo absolu :\n"
+            "1. Repere toutes les paroles et dialogues humains prononces.\n"
+            "2. Decoupe en blocs tres courts et percutants de 2 a 4 mots maximum par sous-titre.\n"
+            "3. Pour chaque bloc, indique l'horodatage precis (start et end en secondes) calque sur le rythme exact de la voix.\n"
+            "4. Ne genere AUCUN sous-titre pendant les silences, bruits de fond ou moments sans parole.\n"
+            "5. Format strict en francais, majuscules, sans emoji."
+        )
+
+        candidate_models = [
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.6-flash",
+            "gemini-flash-latest",
+        ]
+
+        for model_name in candidate_models:
+            try:
+                print(f"[Subtitles] Alignement audio haute precision avec {model_name}...")
+                res = client.models.generate_content(
+                    model=model_name,
+                    contents=[f_ref, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=AlignedAudioTranscription,
+                    ),
+                )
+                data = json.loads(res.text)
+                if not data.get("has_speech", True) or not data.get("cues"):
+                    print("[Subtitles] Aucune voix humaine detectee dans le montage.")
+                    return []
+
+                raw_cues = data.get("cues", [])
+                print(f"[Subtitles] {len(raw_cues)} sous-titres synchronises avec succes via {model_name} !")
+
+                # Clean & validate cues
+                valid_cues = []
+                for c in raw_cues:
+                    st = round(float(c.get("start", 0.0)), 2)
+                    et = round(float(c.get("end", st + 0.8)), 2)
+                    txt = re.sub(r"[^\w\s\-\'\,\.\!\?]", "", str(c.get("text", ""))).strip().upper()
+                    if txt and et > st and st < target_duration:
+                        # Guarantee minimum 0.35s duration
+                        et = max(et, st + 0.35)
+                        et = min(et, target_duration)
+                        valid_cues.append({"start": st, "end": et, "text": txt})
+
+                # Sort and prevent overlaps
+                valid_cues.sort(key=lambda x: x["start"])
+                for i in range(len(valid_cues) - 1):
+                    if valid_cues[i]["end"] > valid_cues[i + 1]["start"]:
+                        valid_cues[i]["end"] = max(valid_cues[i]["start"] + 0.3, valid_cues[i + 1]["start"] - 0.03)
+
+                return valid_cues
+
+            except Exception as e:
+                print(f"[Subtitles] Echec avec {model_name} : {e}")
+                continue
+
+    except Exception as err:
+        print(f"[Subtitles] Erreur globale alignement audio : {err}")
+
+    return []
 
 
 def format_ass_time(seconds: float) -> str:
@@ -247,14 +373,35 @@ def render_montage(
                 raise RuntimeError(f"Erreur assemblage vidéo : {res_c.stderr}")
 
         if progress_callback:
-            progress_callback(50, "Génération des sous-titres et étalonnage des couleurs...")
+            progress_callback(50, "Synchronisation chirurgicale des sous-titres au tempo audio...")
+
+        # Extract audio directly from assembled montage to guarantee perfect sync
+        assembled_audio = scratch_dir / "assembled_audio.mp3"
+        cmd_extract_audio = [
+            "ffmpeg", "-y",
+            "-i", str(concat_out),
+            "-vn", "-ac", "1", "-ar", "24000", "-b:a", "64k",
+            str(assembled_audio),
+        ]
+        subprocess.run(cmd_extract_audio, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        total_montage_dur = get_video_duration(concat_out)
+        aligned_cues = align_subtitles_to_audio(
+            audio_path=assembled_audio,
+            api_key=plan.get("api_key"),
+            target_duration=total_montage_dur,
+        )
+
+        # Use audio-aligned cues if speech found, else fallback to sanitized plan cues
+        final_transcription = aligned_cues if aligned_cues else plan.get("transcription", [])
+        plan["transcription"] = final_transcription
 
         # Step 3: Subtitles & Hook
         ass_path = scratch_dir / "subtitles.ass"
         hook_text = plan.get("hook", "")
         burn_hook = bool(plan.get("burn_hook", False))
         generate_ass_subtitles(
-            transcription=plan.get("transcription", []),
+            transcription=final_transcription,
             hook=hook_text,
             output_ass_path=ass_path,
             burn_hook=burn_hook,

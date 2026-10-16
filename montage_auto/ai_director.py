@@ -205,6 +205,7 @@ Reponds STRICTEMENT en format JSON valide :
             # Emergency synthesis from transcript directly
             plan = build_plan_from_transcript(all_transcripts, rush_durations, target_duration, custom_hook, music_mode)
 
+        plan["api_key"] = active_key
         return validate_and_sanitize_plan(plan, video_paths, target_duration, custom_hook, music_mode)
 
     except Exception as err:
