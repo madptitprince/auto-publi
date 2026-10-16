@@ -34,6 +34,9 @@ data/tiktok_cookies*.json
 data/history.json
 data/today_preview.json
 data/last_ai_analysis.json
+data/*.png
+data/*.jpg
+data/*.jpeg
 
 # IDE & Editor files
 .vscode/
