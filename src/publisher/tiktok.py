@@ -219,7 +219,7 @@ class TikTokPublisher:
                     time.sleep(5)
                     self._dismiss_modals(page)
 
-                # 4. Remplissage de la legende avec click force anti-interception
+                # 4. Remplissage de la legende avec effacement garanti du nom de fichier
                 self._dismiss_modals(page)
                 if editor.count() > 0:
                     try:
@@ -227,16 +227,16 @@ class TikTokPublisher:
                     except Exception:
                         pass
                     time.sleep(0.5)
-                    page.keyboard.press("Control+A")
-                    page.keyboard.press("Backspace")
-                    time.sleep(0.5)
-                    try:
-                        page.keyboard.insert_text(caption)
-                    except Exception:
-                        try:
-                            editor.fill(caption)
-                        except Exception:
-                            page.keyboard.type(caption, delay=15)
+                    page.evaluate("""(text) => {
+                        const el = document.querySelector('div[contenteditable="true"]');
+                        if (el) {
+                            el.focus();
+                            document.execCommand('selectAll', false, null);
+                            document.execCommand('delete', false, null);
+                            document.execCommand('insertText', false, text);
+                        }
+                    }""", caption)
+                    time.sleep(1)
 
                 time.sleep(1)
                 self._dismiss_modals(page)
