@@ -4,6 +4,7 @@ import json
 import shutil
 import datetime
 from pathlib import Path
+import threading
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -509,8 +510,30 @@ def generate_daily_preview(target_date: datetime.date | None = None, force: bool
 scheduler = BackgroundScheduler()
 
 
+def check_and_catchup_publication(simulation: bool = False):
+    """Verifie si la publication du jour a ete manquee et lance un rattrapage automatique."""
+    try:
+        import zoneinfo
+        paris_tz = zoneinfo.ZoneInfo("Europe/Paris")
+        now_paris = datetime.datetime.now(paris_tz)
+        today_str = now_paris.strftime("%Y-%m-%d")
+
+        # Si l'heure courante a Paris est >= 11h30 et avant 23h00
+        if (now_paris.hour > 11 or (now_paris.hour == 11 and now_paris.minute >= 30)) and now_paris.hour < 23:
+            prev = get_today_preview()
+            if prev and prev.get("date") == today_str and not prev.get("is_published"):
+                print(f"[{today_str}] Rattrapage automatique : publication du jour non effectuee a {now_paris.strftime('%H:%M')}, declenchement...")
+                threading.Thread(
+                    target=run_daily_publication,
+                    kwargs={"is_simulation": simulation},
+                    daemon=True,
+                ).start()
+    except Exception as e_catchup:
+        print(f"Erreur verification rattrapage : {e_catchup}")
+
+
 def start_scheduler():
-    """Demarre la pre-generation quotidienne a 00:01 et la publication a 11:30."""
+    """Demarre la pre-generation quotidienne a 00:01 et la publication a 11:30 avec rattrapage automatique."""
     if os.getenv("DISABLE_AUTO_SCHEDULER", "false").lower() in ("true", "1", "yes"):
         print("Planificateur automatique desactive via DISABLE_AUTO_SCHEDULER.")
         return
@@ -518,16 +541,17 @@ def start_scheduler():
     if not scheduler.running:
         default_simulation = os.getenv("SIMULATION_MODE", "false").lower() in ("true", "1", "yes")
 
-        # 1. Preparation de l'apercu chaque nuit a 00:01 heure de Paris
+        # 1. Preparation de l'apercu chaque nuit a 00:01 heure de Paris (grace de 2h)
         scheduler.add_job(
             func=generate_daily_preview,
             trigger=CronTrigger(hour=0, minute=1, timezone="Europe/Paris"),
             id="daily_bchef_preview",
             name="Pre-generation quotidienne de l'apercu BCHEF",
             replace_existing=True,
+            misfire_grace_time=7200,
         )
 
-        # 2. Publication quotidienne a 11:30 heure de Paris
+        # 2. Publication quotidienne a 11:30 heure de Paris (grace de 2h)
         scheduler.add_job(
             func=run_daily_publication,
             trigger=CronTrigger(hour=11, minute=30, timezone="Europe/Paris"),
@@ -535,11 +559,15 @@ def start_scheduler():
             name="Publication quotidienne BCHEF Bourges",
             replace_existing=True,
             kwargs={"is_simulation": default_simulation},
+            misfire_grace_time=7200,
         )
         scheduler.start()
         print("Planificateur active :")
-        print(" - Pre-generation de l'apercu du jour chaque nuit a 00h01 (Paris).")
-        print(f" - Publication automatique chaque jour a 11h30 (Paris, simulation={default_simulation}).")
+        print(" - Pre-generation de l'apercu du jour chaque nuit a 00h01 (Paris, grace=2h).")
+        print(f" - Publication automatique chaque jour a 11h30 (Paris, simulation={default_simulation}, grace=2h).")
+
+        # 3. Verification d'un eventuel retard si le conteneur a demarre apres 11h30
+        check_and_catchup_publication(simulation=default_simulation)
 
 
 if __name__ == "__main__":
