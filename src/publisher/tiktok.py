@@ -24,7 +24,13 @@ class TikTokPublisher:
         if cookies_path:
             p = cookies_path
         else:
-            p = prof.get("tiktok_cookies_file") or os.getenv("TIKTOK_COOKIES_PATH")
+            p = prof.get("tiktok_cookies_file")
+            if not p:
+                if active_target == "official":
+                    candidate = DATA_DIR / "tiktok_cookies_official.json"
+                    p = "tiktok_cookies_official.json" if candidate.exists() else os.getenv("TIKTOK_COOKIES_PATH")
+                else:
+                    p = os.getenv("TIKTOK_COOKIES_PATH")
 
         if p:
             resolved = Path(p)
@@ -253,15 +259,20 @@ class TikTokPublisher:
                 time.sleep(2)
                 self._dismiss_modals(page)
 
-                # 6. Defilement vers le bas et detection du bouton Post
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                # 6. Defilement vers le bas et detection du bouton Post certifie
+                page.evaluate("""() => {
+                    window.scrollTo(0, 10000);
+                    document.querySelectorAll("div").forEach(d => {
+                        if (d.scrollHeight > 1000) d.scrollTop = 10000;
+                    });
+                }""")
                 time.sleep(2)
                 self._dismiss_modals(page)
 
                 publish_btn = page.locator(
+                    'button[data-e2e="post_video_button"], '
                     'button.Button__root--type-primary:has-text("Post"), '
-                    'button:has-text("Post"), '
-                    'button:has-text("Publier")'
+                    'button.Button__root--type-primary:has-text("Publier")'
                 ).first
 
                 if publish_btn.count() > 0:
@@ -296,13 +307,13 @@ class TikTokPublisher:
 
                     # Attente de la redirection ou confirmation de succes
                     is_published = False
-                    for _ in range(15):
+                    for _ in range(20):
                         time.sleep(2)
                         cur_url = page.url
                         if "content" in cur_url or "manage" in cur_url:
                             is_published = True
                             break
-                        if page.locator('*:has-text("Manage your posts"), *:has-text("Your video has been published"), *:has-text("Uploaded")').count() > 0:
+                        if page.locator('*:has-text("Manage your posts"), *:has-text("Your video has been published"), *:has-text("Upload another video")').count() > 0:
                             is_published = True
                             break
 

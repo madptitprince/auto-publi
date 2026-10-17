@@ -12,11 +12,13 @@
   "profiles": {
     "test": {
       "instagram_username": "test_publi00",
-      "instagram_password": "mad1234"
+      "instagram_password": "mad1234",
+      "tiktok_cookies_file": "tiktok_cookies.json"
     },
     "official": {
       "instagram_username": "bchef_bourges",
-      "instagram_password": "Dreadneal1989"
+      "instagram_password": "Dreadneal1989",
+      "tiktok_cookies_file": "tiktok_cookies_official.json"
     }
   }
 }
