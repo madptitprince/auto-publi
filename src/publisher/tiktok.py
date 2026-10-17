@@ -176,7 +176,13 @@ class TikTokPublisher:
             with sync_playwright() as p:
                 launch_kwargs = {
                     "headless": True,
-                    "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                    "args": [
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-blink-features=AutomationControlled",
+                    ],
+                    "ignore_default_args": ["--enable-automation"],
                 }
                 chrome_path = "/opt/google/chrome/chrome"
                 if Path(chrome_path).exists():
@@ -184,11 +190,17 @@ class TikTokPublisher:
 
                 browser = p.chromium.launch(**launch_kwargs)
                 context = browser.new_context(
-                    user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-                    viewport={"width": 1280, "height": 900},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                    viewport={"width": 1440, "height": 900},
+                    locale="fr-FR",
                 )
                 context.add_cookies(cookies)
                 page = context.new_page()
+                page.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                """)
 
                 # 1. Navigation vers TikTok Studio
                 page.goto("https://www.tiktok.com/tiktokstudio/upload", wait_until="domcontentloaded")
@@ -244,15 +256,31 @@ class TikTokPublisher:
                 # 5. Selection du lieu (BCHEF Bourges)
                 if location_query:
                     try:
-                        loc_box = page.locator('*:has-text("Rechercher des lieux")').last
-                        if loc_box.count() > 0:
-                            loc_box.click(timeout=3000, force=True)
-                            time.sleep(1)
-                            page.keyboard.type(location_query)
+                        page.evaluate("""() => {
+                            document.querySelectorAll("#react-joyride-portal, .react-joyride__overlay").forEach(e => e.remove());
+                        }""")
+                        loc_input = page.locator('input.Select__searchInput, input[placeholder*="Search locations" i], input[placeholder*="location" i]').first
+                        if loc_input.count() > 0:
+                            loc_input.click(force=True)
+                            time.sleep(0.5)
+                            page.keyboard.type(location_query, delay=70)
                             time.sleep(2)
-                            first_loc_item = page.locator('div[role="listbox"] div, ul li, .location-item').first
-                            if first_loc_item.count() > 0:
-                                first_loc_item.click(timeout=3000, force=True)
+
+                            # Selection dans la liste deroulante
+                            candidates = page.locator('.Select__menu div, div[role="option"], div[class*="option"]').all()
+                            matched_target = None
+                            for cand in candidates:
+                                txt = cand.inner_text().strip().lower()
+                                if "bourges" in txt or "bchef" in txt:
+                                    matched_target = cand
+                                    break
+
+                            if matched_target:
+                                matched_target.click(force=True)
+                                print(f"Lieu TikTok applique : {matched_target.inner_text().strip().replace(chr(10), ' ')}")
+                            elif candidates:
+                                candidates[0].click(force=True)
+                                print("Premier lieu suggere applique")
                     except Exception as e_loc:
                         print(f"Lieu TikTok non applique : {e_loc}")
 
