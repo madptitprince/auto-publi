@@ -320,13 +320,12 @@ def run_daily_publication(
         )
         report["publications"].append(insta_story_res)
 
-        # Reel Instagram (avec lieu BCHEF Bourges - SANS repartage en story pour eviter le fond noir)
+        # Reel Instagram (avec lieu BCHEF Bourges)
         insta_reel_res = insta.publish_reel(
             video_path=Path(video_res["output_video"]),
             caption=full_caption,
             cover_path=Path(video_res["cover_image"]),
             simulation=is_simulation,
-            share_to_story=False,
         )
         report["publications"].append(insta_reel_res)
 

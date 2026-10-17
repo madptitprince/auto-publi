@@ -209,7 +209,6 @@ class InstagramPublisher:
         caption: str,
         cover_path: Path | None = None,
         simulation: bool = True,
-        share_to_story: bool = False,
     ) -> dict:
         """Publishes a video reel with location BCHEF Bourges."""
         if not video_path.exists():
@@ -223,7 +222,6 @@ class InstagramPublisher:
                 "file": str(video_path),
                 "caption": caption,
                 "location": "BCHEF - 13 Place Gordaine, Bourges",
-                "shared_to_story": share_to_story,
                 "message": (
                     "Reel prêt et validé (Mode simulation ou identifiants manquants). "
                     "Renseignez INSTAGRAM_USERNAME et INSTAGRAM_PASSWORD pour poster en direct."
@@ -246,25 +244,12 @@ class InstagramPublisher:
                 location=bchef_loc,
             )
 
-            # 3. Direct share Reel to Story
-            shared_story_id = None
-            if share_to_story:
-                try:
-                    print(f"Partage immédiat du Reel {media.pk} en Story Instagram...")
-                    shared_story = cl.media_share_to_story(str(media.pk))
-                    shared_story_id = str(shared_story.pk)
-                    print(f"Reel partagé en Story avec succès (ID: {shared_story_id})")
-                except Exception as e_share:
-                    print(f"Partage du Reel en story non effectué : {e_share}")
-
             return {
                 "platform": "instagram",
                 "type": "reel",
                 "status": "published",
                 "media_id": str(media.pk),
                 "location": bchef_loc.name if bchef_loc else "Bourges",
-                "shared_to_story": bool(shared_story_id),
-                "story_media_id": shared_story_id,
             }
         except Exception as e:
             return {
