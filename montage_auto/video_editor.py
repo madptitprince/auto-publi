@@ -13,15 +13,27 @@ from google.genai import types
 from montage_auto.config import GEMINI_API_KEY, FONTS_DIR, MUSIC_DIR, TEMP_DIR
 
 
-class SubtitleCueItem(BaseModel):
-    start: float = Field(description="Horodatage exact de debut en secondes (float, ex: 1.35)")
-    end: float = Field(description="Horodatage exact de fin en secondes (float, ex: 2.10)")
-    text: str = Field(description="Texte court de 2 a 4 mots maximum en majuscules sans emoji")
+class WordTiming(BaseModel):
+    word: str = Field(description="Mot individuel prononce en majuscules sans emoji")
+    start: float = Field(description="Horodatage exact de debut du mot en secondes")
+    end: float = Field(description="Horodatage exact de fin du mot en secondes")
 
 
-class AlignedAudioTranscription(BaseModel):
+class PhraseBlock(BaseModel):
+    phrase: str = Field(description="Phrase courte ou groupe de 2 a 4 mots en majuscules")
+    start: float = Field(description="Horodatage exact de debut de la phrase en secondes")
+    end: float = Field(description="Horodatage exact de fin de la phrase en secondes")
+    words: list[WordTiming] = Field(description="Liste temporelle precise de chaque mot du groupe")
+
+
+class AudioTranscriptionWords(BaseModel):
     has_speech: bool = Field(description="True si des voix humaines sont audibles, False sinon")
-    cues: list[SubtitleCueItem] = Field(description="Sequences chronologiques de sous-titres parfaitement synchronisees")
+    cues: list[PhraseBlock] = Field(description="Groupes de mots chronologiques synchronises")
+
+
+# Backward compatibility aliases
+SubtitleCueItem = PhraseBlock
+AlignedAudioTranscription = AudioTranscriptionWords
 
 
 def get_video_duration(path: Path) -> float:
@@ -47,9 +59,9 @@ def align_subtitles_to_audio(
     target_duration: float = 25.0,
 ) -> list[dict]:
     """
-    Direct multimodal audio speech-to-text alignment.
-    Transcribes the exact assembled audio track with surgical timestamps (start, end)
-    perfectly synced to the tempo of spoken dialogue.
+    Direct multimodal audio speech-to-text alignment with word-level surgical precision.
+    Transcribes the exact assembled audio track with word-by-word timestamps
+    perfectly synced to the tempo of spoken dialogue for viral dynamic highlighting.
     """
     active_key = api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
     if not active_key:
@@ -67,32 +79,33 @@ def align_subtitles_to_audio(
             f_ref = client.files.get(name=f_ref.name)
 
         prompt = (
-            "Tu es un expert en synchronisation audio/sous-titres pour des videos virales TikTok/Reels. "
-            f"Cet extrait audio final dure {round(target_duration, 1)} secondes. "
-            "Consignes de tempo absolu :\n"
-            "1. Repere toutes les paroles et dialogues humains prononces.\n"
-            "2. Decoupe en blocs tres courts et percutants de 2 a 4 mots maximum par sous-titre.\n"
-            "3. Pour chaque bloc, indique l'horodatage precis (start et end en secondes) calque sur le rythme exact de la voix.\n"
-            "4. Ne genere AUCUN sous-titre pendant les silences, bruits de fond ou moments sans parole.\n"
-            "5. Format strict en francais, majuscules, sans emoji."
+            "Tu es un monteur professionnel expert en synchronisation audio pour sous-titres viraux (TikTok / Reels).\n"
+            f"Cet extrait audio final dure {round(target_duration, 1)} secondes.\n"
+            "Consignes de synchronisation millimetrique :\n"
+            "1. Reperes toutes les paroles et dialogues humains prononces.\n"
+            "2. Decoupe la parole en phrases tres courtes de 2 a 4 mots maximum par bloc visuel.\n"
+            "3. Pour CHAQUE phrase, donne son horodatage start et end exacts en secondes.\n"
+            "4. Pour CHAQUE MOT de la phrase, donne son horodatage start et end ultra-precis en secondes au moment exact ou la voix le prononce.\n"
+            "5. Ne genere aucun sous-titre pendant les silences, bruits de fond ou moments sans parole.\n"
+            "6. Format strict en francais, majuscules, sans emoji."
         )
 
         candidate_models = [
             "gemini-3.1-flash-lite",
             "gemini-3.8-flash",
-            "gemini-3.6-flash",
+            "gemini-2.5-flash",
             "gemini-flash-latest",
         ]
 
         for model_name in candidate_models:
             try:
-                print(f"[Subtitles] Alignement audio haute precision avec {model_name}...")
+                print(f"[Subtitles] Alignement audio mot-a-mot avec {model_name}...")
                 res = client.models.generate_content(
                     model=model_name,
                     contents=[f_ref, prompt],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        response_schema=AlignedAudioTranscription,
+                        response_schema=AudioTranscriptionWords,
                     ),
                 )
                 data = json.loads(res.text)
@@ -101,27 +114,93 @@ def align_subtitles_to_audio(
                     return []
 
                 raw_cues = data.get("cues", [])
-                print(f"[Subtitles] {len(raw_cues)} sous-titres synchronises avec succes via {model_name} !")
+                print(f"[Subtitles] {len(raw_cues)} phrases synchronisees avec succes via {model_name} !")
 
-                # Clean & validate cues
-                valid_cues = []
+                # Process phrases and words
+                processed_phrases = []
                 for c in raw_cues:
-                    st = round(float(c.get("start", 0.0)), 2)
-                    et = round(float(c.get("end", st + 0.8)), 2)
-                    txt = re.sub(r"[^\w\s\-\'\,\.\!\?]", "", str(c.get("text", ""))).strip().upper()
-                    if txt and et > st and st < target_duration:
-                        # Guarantee minimum 0.35s duration
-                        et = max(et, st + 0.35)
-                        et = min(et, target_duration)
-                        valid_cues.append({"start": st, "end": et, "text": txt})
+                    raw_phrase = re.sub(r"[^\w\s\-\'\,\.\!\?]", "", str(c.get("phrase", ""))).strip().upper()
+                    raw_words = c.get("words", [])
 
-                # Sort and prevent overlaps
-                valid_cues.sort(key=lambda x: x["start"])
-                for i in range(len(valid_cues) - 1):
-                    if valid_cues[i]["end"] > valid_cues[i + 1]["start"]:
-                        valid_cues[i]["end"] = max(valid_cues[i]["start"] + 0.3, valid_cues[i + 1]["start"] - 0.03)
+                    clean_words = []
+                    for w in raw_words:
+                        w_txt = re.sub(r"[^\w\s\-\']", "", str(w.get("word", ""))).strip().upper()
+                        if not w_txt:
+                            continue
+                        w_st = round(float(w.get("start", 0.0)), 2)
+                        w_et = round(float(w.get("end", w_st + 0.2)), 2)
+                        w_et = max(w_et, w_st + 0.10)
+                        w_st = min(w_st, target_duration)
+                        w_et = min(w_et, target_duration)
+                        clean_words.append({
+                            "word": w_txt,
+                            "start": w_st,
+                            "end": w_et,
+                        })
 
-                return valid_cues
+                    # Fallback if phrase text exists but words list was omitted by model
+                    if not clean_words and raw_phrase:
+                        tokens = raw_phrase.split()
+                        p_st = round(float(c.get("start", 0.0)), 2)
+                        p_et = round(float(c.get("end", p_st + 1.2)), 2)
+                        p_dur = max(p_et - p_st, 0.4)
+                        step = p_dur / max(len(tokens), 1)
+                        for idx, tok in enumerate(tokens):
+                            w_st = round(p_st + idx * step, 2)
+                            w_et = round(w_st + step, 2)
+                            clean_words.append({
+                                "word": tok,
+                                "start": w_st,
+                                "end": w_et,
+                            })
+
+                    if not clean_words:
+                        continue
+
+                    # Sort words
+                    clean_words.sort(key=lambda x: x["start"])
+
+                    # Split long phrases (> 4 words) into chunks of 2 to 3 words
+                    if len(clean_words) <= 4:
+                        chunks = [clean_words]
+                    else:
+                        chunks = []
+                        for i in range(0, len(clean_words), 3):
+                            chunk_slice = clean_words[i:i + 3]
+                            if chunk_slice:
+                                chunks.append(chunk_slice)
+
+                    for chunk in chunks:
+                        p_start = chunk[0]["start"]
+                        p_end = chunk[-1]["end"]
+                        if p_end > p_start and p_start < target_duration:
+                            p_end = max(p_end, p_start + 0.35)
+                            p_end = min(p_end, target_duration)
+                            phrase_text = " ".join(w["word"] for w in chunk)
+                            processed_phrases.append({
+                                "phrase": phrase_text,
+                                "start": p_start,
+                                "end": p_end,
+                                "words": chunk,
+                            })
+
+                # Sort phrases chronologically
+                processed_phrases.sort(key=lambda x: x["start"])
+
+                # Prevent phrase overlaps
+                for i in range(len(processed_phrases) - 1):
+                    if processed_phrases[i]["end"] > processed_phrases[i + 1]["start"]:
+                        processed_phrases[i]["end"] = max(
+                            processed_phrases[i]["start"] + 0.25,
+                            processed_phrases[i + 1]["start"] - 0.02
+                        )
+                        if processed_phrases[i]["words"]:
+                            processed_phrases[i]["words"][-1]["end"] = min(
+                                processed_phrases[i]["words"][-1]["end"],
+                                processed_phrases[i]["end"]
+                            )
+
+                return processed_phrases
 
             except Exception as e:
                 print(f"[Subtitles] Echec avec {model_name} : {e}")
@@ -144,72 +223,21 @@ def format_ass_time(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
-def chunk_transcription_items(transcription: list[dict], max_words: int = 3) -> list[dict]:
-    """
-    Splits sentence cues into short dynamic chunks of 2-3 words
-    with proportional timestamps, creating punchy viral TikTok/Reels subtitles.
-    """
-    chunked = []
-    for item in transcription:
-        raw_text = str(item.get("text", "")).replace("\\", "").replace("\n", " ").strip()
-        if not raw_text:
-            continue
-
-        st = float(item.get("start", 0.0))
-        et = float(item.get("end", st + 1.2))
-        total_dur = max(et - st, 0.4)
-
-        words = raw_text.split()
-        if len(words) <= max_words:
-            chunked.append({
-                "start": st,
-                "end": et,
-                "text": raw_text.upper()
-            })
-            continue
-
-        # Split words into groups of max_words
-        groups = []
-        curr = []
-        for w in words:
-            curr.append(w)
-            if len(curr) >= max_words:
-                groups.append(" ".join(curr))
-                curr = []
-        if curr:
-            groups.append(" ".join(curr))
-
-        # Distribute time proportionally according to group character lengths
-        total_chars = max(sum(len(g) for g in groups), 1)
-        curr_time = st
-        for i, g in enumerate(groups):
-            dur_g = total_dur * (len(g) / total_chars)
-            # Ensure minimum display time of 0.35s
-            dur_g = max(dur_g, 0.35)
-            end_g = curr_time + dur_g
-            if i == len(groups) - 1:
-                end_g = max(end_g, et)
-            chunked.append({
-                "start": round(curr_time, 2),
-                "end": round(end_g, 2),
-                "text": g.upper()
-            })
-            curr_time = end_g
-
-    return chunked
-
-
 def generate_ass_subtitles(
     transcription: list[dict],
     hook: str,
     output_ass_path: Path,
     burn_hook: bool = False,
     hook_duration: float = 4.5,
+    font_name: str = "R41 Etoile",
+    highlight_color: str = "&H0000E6FF&",
 ) -> Path:
     """
     Generates a professional ASS subtitle file:
     - Layer 1: Optional viral hook banner at top (only if burn_hook is True)
-    - Layer 0: Dynamic short-chunk subtitles in BCHEF R41 Etoile with smooth pop-in animation
+    - Layer 0: High-fluidity word-by-word active tracking subtitles in BCHEF branding.
+      The full phrase stays 100% stable on screen while the currently spoken word
+      lights up in vibrant BCHEF yellow without any jitter or pixel displacement.
     """
     ass_content = f"""[Script Info]
 ScriptType: v4.00+
@@ -219,7 +247,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Subtitle,R41 Etoile,62,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,0,0,0,0,100,100,0,0,1,5,1.5,2,70,70,330,1
+Style: Subtitle,{font_name},66,&H00FFFFFF,{highlight_color},&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,5,2,2,70,70,330,1
 Style: HookTop,Heavitas Neue,54,&H00FFFFFF,&H000000FF,&H00000000,&HB0000000,-1,0,0,0,100,100,0,0,1,6,2,8,60,60,180,1
 
 [Events]
@@ -231,20 +259,76 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         hook_end = format_ass_time(hook_duration)
         ass_content += f"Dialogue: 1,0:00:00.00,{hook_end},HookTop,,0,0,0,,{hook_clean}\n"
 
-    # Chunk long sequences into 2-3 words per cue
-    dynamic_cues = chunk_transcription_items(transcription, max_words=3)
+    for item in transcription:
+        # Check if item contains word-level timings
+        p_words = item.get("words", [])
+        p_start = float(item.get("start", 0.0))
+        p_end = float(item.get("end", p_start + 1.2))
 
-    # Add subtitle cues with subtle pop-in animation
-    for item in dynamic_cues:
-        st = float(item.get("start", 0.0))
-        et = float(item.get("end", st + 0.8))
-        txt = str(item.get("text", "")).strip()
-        if txt:
-            st_str = format_ass_time(st)
-            et_str = format_ass_time(et)
-            # Pop-in scale bounce: expands slightly then settles to normal size in 140ms
-            animated_txt = f"{{\\t(0,70,\\fscx108\\fscy108)\\t(70,140,\\fscx100\\fscy100)}}{txt}"
-            ass_content += f"Dialogue: 0,{st_str},{et_str},Subtitle,,0,0,0,,{animated_txt}\n"
+        if not p_words:
+            # Fallback for legacy cues or cues without word-level breakdowns
+            raw_text = str(item.get("phrase", item.get("text", ""))).strip().upper()
+            if not raw_text:
+                continue
+            words_list = raw_text.split()
+            # If 1-3 words, show static line
+            if len(words_list) <= 3:
+                st_str = format_ass_time(p_start)
+                et_str = format_ass_time(p_end)
+                ass_content += f"Dialogue: 0,{st_str},{et_str},Subtitle,,0,0,0,,{raw_text}\n"
+                continue
+            # If multiple words, synthesize word timings
+            dur = max(p_end - p_start, 0.4)
+            w_step = dur / len(words_list)
+            p_words = []
+            for i, w in enumerate(words_list):
+                p_words.append({
+                    "word": w,
+                    "start": p_start + i * w_step,
+                    "end": p_start + (i + 1) * w_step,
+                })
+
+        # Ensure chunks are <= 4 words
+        if len(p_words) <= 4:
+            chunks = [p_words]
+        else:
+            chunks = [p_words[i:i + 3] for i in range(0, len(p_words), 3)]
+
+        for chunk_words in chunks:
+            if not chunk_words:
+                continue
+            c_start = chunk_words[0]["start"]
+            c_end = chunk_words[-1]["end"]
+            n_words = len(chunk_words)
+
+            for idx, active_w in enumerate(chunk_words):
+                w_st = active_w["start"]
+                # Active highlight extends until the start of the next word to prevent black flashes
+                if idx < n_words - 1:
+                    w_et = chunk_words[idx + 1]["start"]
+                else:
+                    w_et = c_end
+
+                if w_et <= w_st:
+                    w_et = w_st + 0.15
+
+                st_str = format_ass_time(w_st)
+                et_str = format_ass_time(w_et)
+
+                # Build line text: active word has highlight color tag, others stay crisp white
+                line_parts = []
+                for i, w in enumerate(chunk_words):
+                    w_txt = re.sub(r"[^\w\s\-\'\,\.\!\?]", "", str(w.get("word", ""))).strip().upper()
+                    if not w_txt:
+                        continue
+                    if i == idx:
+                        line_parts.append(f"{{\\c{highlight_color}}}{w_txt}{{\\r\\c&H00FFFFFF&}}")
+                    else:
+                        line_parts.append(w_txt)
+
+                if line_parts:
+                    full_line = " ".join(line_parts)
+                    ass_content += f"Dialogue: 0,{st_str},{et_str},Subtitle,,0,0,0,,{full_line}\n"
 
     output_ass_path.write_text(ass_content, encoding="utf-8")
     return output_ass_path
@@ -400,12 +484,14 @@ def render_montage(
         ass_path = scratch_dir / "subtitles.ass"
         hook_text = plan.get("hook", "")
         burn_hook = bool(plan.get("burn_hook", False))
+        font_name = plan.get("font_name", "R41 Etoile")
         generate_ass_subtitles(
             transcription=final_transcription,
             hook=hook_text,
             output_ass_path=ass_path,
             burn_hook=burn_hook,
             hook_duration=4.5,
+            font_name=font_name,
         )
 
         # Step 4: Color Grading filter graph
