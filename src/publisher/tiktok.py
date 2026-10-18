@@ -220,10 +220,24 @@ class TikTokPublisher:
                 # 3. Attente dynamique de televersement et d'apparition de l'editeur
                 editor = page.locator('div[contenteditable="true"]').first
                 video_ready = False
-                for _ in range(30):
+                for _ in range(45):
                     time.sleep(2)
                     self._dismiss_modals(page)
-                    if editor.count() > 0 and editor.is_visible():
+                    
+                    # Detection et gestion automatique de l'erreur "Une erreur est survenue. Merci de reessayer."
+                    retry_btn = page.locator('button:has-text("Réessayer"), button:has-text("Reessayer"), button:has-text("Retry")')
+                    if retry_btn.count() > 0 and retry_btn.first.is_visible():
+                        print("Bouton Reessayer detecte durant l'upload TikTok, clic de relance...")
+                        retry_btn.first.click(force=True)
+                        time.sleep(3)
+                        continue
+
+                    # Verifier que l'editeur est visible ET que le bouton de publication ou la couverture est monte
+                    has_editor = editor.count() > 0 and editor.is_visible()
+                    has_cover_or_post = page.locator('button[data-e2e="post_video_button"], *:has-text("Modifier la couverture"), *:has-text("Edit cover")').count() > 0
+                    is_uploading = page.locator('*:has-text("Importation..."), *:has-text("Uploading..."), *:has-text("Téléversement...")').count() > 0
+
+                    if has_editor and has_cover_or_post and not is_uploading:
                         video_ready = True
                         break
 
@@ -297,15 +311,21 @@ class TikTokPublisher:
                 time.sleep(2)
                 self._dismiss_modals(page)
 
-                publish_btn = page.locator(
-                    'button[data-e2e="post_video_button"], '
-                    'button.Button__root--type-primary:has-text("Post"), '
-                    'button.Button__root--type-primary:has-text("Publier")'
-                ).first
+                publish_btn = None
+                for _ in range(10):
+                    candidate = page.locator(
+                        'button[data-e2e="post_video_button"], '
+                        'button.Button__root--type-primary:has-text("Post"), '
+                        'button.Button__root--type-primary:has-text("Publier")'
+                    ).first
+                    if candidate.count() > 0 and candidate.is_visible():
+                        publish_btn = candidate
+                        break
+                    time.sleep(1)
 
-                if publish_btn.count() > 0:
+                if publish_btn and publish_btn.count() > 0:
                     # Attente que les verifications TikTok se terminent
-                    for _ in range(15):
+                    for _ in range(20):
                         self._dismiss_modals(page)
                         if publish_btn.is_enabled():
                             break
