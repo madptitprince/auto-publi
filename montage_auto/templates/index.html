@@ -352,6 +352,70 @@
         </main>
     </div>
 
+    <!-- Rush Video Preview Modal -->
+    <div id="rush-preview-modal" class="rush-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="preview-rush-name">
+        <div class="rush-modal-backdrop" id="preview-modal-backdrop"></div>
+        <div class="rush-modal-container">
+            <div class="rush-modal-header">
+                <div class="rush-modal-title-box">
+                    <div class="rush-modal-badge-row">
+                        <span class="rush-badge-type">LECTEUR DE RUSH</span>
+                        <span class="rush-badge-folder" id="preview-rush-folder">Dossier</span>
+                    </div>
+                    <h3 class="rush-modal-filename" id="preview-rush-name">Nom du fichier</h3>
+                    <div class="rush-modal-specs" id="preview-rush-specs">
+                        <span id="preview-rush-duration">0s</span>
+                        <span class="spec-separator">•</span>
+                        <span id="preview-rush-size">0 Mo</span>
+                        <span class="spec-separator">•</span>
+                        <span id="preview-rush-counter" class="rush-counter-tag">1 / 1</span>
+                    </div>
+                </div>
+                <button type="button" class="rush-modal-close-btn" id="btn-close-rush-modal" title="Fermer (Échap)" aria-label="Fermer la prévisualisation">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="rush-modal-player-wrap">
+                <button type="button" class="rush-nav-btn prev" id="btn-preview-prev-rush" title="Rush précédent (←)">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+
+                <div class="rush-video-frame">
+                    <video id="rush-preview-player" controls playsinline preload="auto">
+                        Votre navigateur ne supporte pas la lecture de cette vidéo.
+                    </video>
+                </div>
+
+                <button type="button" class="rush-nav-btn next" id="btn-preview-next-rush" title="Rush suivant (→)">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="rush-modal-footer">
+                <div class="rush-modal-shortcuts-hint">
+                    <span>Navigation : <code>←</code> <code>→</code></span>
+                    <span>Fermer : <code>Échap</code></span>
+                </div>
+                <div class="rush-modal-actions">
+                    <button type="button" class="btn-preview-toggle-select" id="btn-preview-toggle-select">
+                        <span class="select-check-icon">✓</span>
+                        <span id="btn-preview-select-text">Sélectionner ce rush</span>
+                    </button>
+                    <button type="button" class="btn-secondary" id="btn-preview-close-action">Fermer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Mobile Bottom Navigation Bar -->
     <nav class="mobile-bottom-nav">
         <button class="mobile-nav-item active" data-tab="create" id="mobile-nav-create">

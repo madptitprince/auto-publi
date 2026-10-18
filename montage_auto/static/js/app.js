@@ -1,6 +1,8 @@
 // BCHEF Montage Studio Front-End Logic
 const API_BASE = window.__ROOT_PATH__ || (window.location.pathname.startsWith('/studio') ? '/studio' : '');
 let selectedRushs = new Set();
+let allRushs = [];
+let currentPreviewIndex = -1;
 let currentJobId = null;
 let pollInterval = null;
 
@@ -47,12 +49,29 @@ const mobileHistoryBadge = document.getElementById('mobile-history-badge');
 const mobileRushsBadge = document.getElementById('mobile-rushs-badge');
 const toastEl = document.getElementById('toast');
 
+// Rush Preview Modal Elements
+const rushPreviewModal = document.getElementById('rush-preview-modal');
+const previewModalBackdrop = document.getElementById('preview-modal-backdrop');
+const previewRushName = document.getElementById('preview-rush-name');
+const previewRushFolder = document.getElementById('preview-rush-folder');
+const previewRushDuration = document.getElementById('preview-rush-duration');
+const previewRushSize = document.getElementById('preview-rush-size');
+const previewRushCounter = document.getElementById('preview-rush-counter');
+const btnCloseRushModal = document.getElementById('btn-close-rush-modal');
+const btnPreviewCloseAction = document.getElementById('btn-preview-close-action');
+const btnPreviewPrevRush = document.getElementById('btn-preview-prev-rush');
+const btnPreviewNextRush = document.getElementById('btn-preview-next-rush');
+const rushPreviewPlayer = document.getElementById('rush-preview-player');
+const btnPreviewToggleSelect = document.getElementById('btn-preview-toggle-select');
+const btnPreviewSelectText = document.getElementById('btn-preview-select-text');
+
 // Initialize
 function initApp() {
     initNavigation();
     initSourceSwitcher();
     initDropzone();
     initMontageForm();
+    initRushPreviewModal();
     loadRushs();
     loadHistory();
 }
@@ -131,6 +150,7 @@ async function loadRushs() {
         const res = await fetch(`${API_BASE}/api/rushs`);
         const data = await res.json();
         const rushs = data.rushs || [];
+        allRushs = rushs;
         rushsBadge.textContent = rushs.length;
         if (mobileRushsBadge) mobileRushsBadge.textContent = rushs.length;
 
@@ -140,7 +160,7 @@ async function loadRushs() {
         }
 
         rushsGrid.innerHTML = '';
-        rushs.forEach(rush => {
+        rushs.forEach((rush, index) => {
             const card = document.createElement('div');
             card.className = `rush-card ${selectedRushs.has(rush.relative_path) ? 'selected' : ''}`;
             card.dataset.path = rush.relative_path;
@@ -148,8 +168,16 @@ async function loadRushs() {
             card.innerHTML = `
                 <input type="checkbox" class="rush-checkbox" ${selectedRushs.has(rush.relative_path) ? 'checked' : ''}>
                 <button type="button" class="btn-card-delete-rush" data-path="${rush.relative_path}" title="Supprimer ce rush définitivement">✕</button>
-                <div class="rush-thumbnail">
+                <div class="rush-thumbnail" title="Cliquer pour regarder le rush">
                     <video src="${API_BASE}/rushs-media/${encodeURIComponent(rush.relative_path)}" preload="metadata" muted playsinline></video>
+                    <div class="rush-preview-trigger">
+                        <div class="rush-preview-play-icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                <polygon points="6 4 20 12 6 20"></polygon>
+                            </svg>
+                        </div>
+                        <span class="rush-preview-play-text">Aperçu</span>
+                    </div>
                     <span class="rush-meta-pill">${rush.duration}s</span>
                 </div>
                 <div class="rush-info">
@@ -167,9 +195,36 @@ async function loadRushs() {
                 }
             });
 
-            // Toggle selection
+            // Preview click on thumbnail
+            const thumb = card.querySelector('.rush-thumbnail');
+            thumb.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openRushPreview(index);
+            });
+
+            // Hover preview (muted scrub)
+            let hoverTimeout;
+            const thumbVideo = thumb.querySelector('video');
+            thumb.addEventListener('mouseenter', () => {
+                hoverTimeout = setTimeout(() => {
+                    if (thumbVideo && thumbVideo.paused) {
+                        thumbVideo.play().catch(() => {});
+                    }
+                }, 200);
+            });
+            thumb.addEventListener('mouseleave', () => {
+                clearTimeout(hoverTimeout);
+                if (thumbVideo && !thumbVideo.paused) {
+                    thumbVideo.pause();
+                    thumbVideo.currentTime = 0;
+                }
+            });
+
+            // Toggle selection on card click
             card.addEventListener('click', (e) => {
-                if (e.target.tagName.toLowerCase() === 'input' || e.target.classList.contains('btn-card-delete-rush')) return;
+                if (e.target.tagName.toLowerCase() === 'input' || 
+                    e.target.closest('.btn-card-delete-rush') || 
+                    e.target.closest('.rush-thumbnail')) return;
                 const checkbox = card.querySelector('.rush-checkbox');
                 checkbox.checked = !checkbox.checked;
                 toggleRushSelection(rush.relative_path, checkbox.checked, card);
@@ -193,13 +248,139 @@ async function loadRushs() {
 function toggleRushSelection(path, isSelected, cardElement) {
     if (isSelected) {
         selectedRushs.add(path);
-        cardElement.classList.add('selected');
+        if (cardElement) cardElement.classList.add('selected');
     } else {
         selectedRushs.delete(path);
-        cardElement.classList.remove('selected');
+        if (cardElement) cardElement.classList.remove('selected');
     }
     updateSelectionUI();
+
+    if (currentPreviewIndex >= 0 && allRushs[currentPreviewIndex] && allRushs[currentPreviewIndex].relative_path === path) {
+        updateModalSelectButton(allRushs[currentPreviewIndex]);
+    }
 }
+
+// Rush Preview Modal Logic
+function initRushPreviewModal() {
+    if (btnCloseRushModal) btnCloseRushModal.addEventListener('click', closeRushPreview);
+    if (btnPreviewCloseAction) btnPreviewCloseAction.addEventListener('click', closeRushPreview);
+    if (previewModalBackdrop) previewModalBackdrop.addEventListener('click', closeRushPreview);
+
+    if (btnPreviewPrevRush) {
+        btnPreviewPrevRush.addEventListener('click', () => navigateRushPreview(-1));
+    }
+    if (btnPreviewNextRush) {
+        btnPreviewNextRush.addEventListener('click', () => navigateRushPreview(1));
+    }
+
+    if (btnPreviewToggleSelect) {
+        btnPreviewToggleSelect.addEventListener('click', () => {
+            if (currentPreviewIndex < 0 || !allRushs[currentPreviewIndex]) return;
+            const rush = allRushs[currentPreviewIndex];
+            const isCurrentlySelected = selectedRushs.has(rush.relative_path);
+            
+            // Find card in grid if present
+            const safePath = (window.CSS && CSS.escape) ? CSS.escape(rush.relative_path) : rush.relative_path.replace(/["\\]/g, '\\$&');
+            const card = rushsGrid.querySelector(`.rush-card[data-path="${safePath}"]`);
+            if (card) {
+                const cb = card.querySelector('.rush-checkbox');
+                if (cb) cb.checked = !isCurrentlySelected;
+            }
+            toggleRushSelection(rush.relative_path, !isCurrentlySelected, card);
+            showToast(!isCurrentlySelected ? `"${rush.name}" ajouté à la sélection.` : `"${rush.name}" retiré de la sélection.`);
+        });
+    }
+
+    // Keyboard controls
+    window.addEventListener('keydown', (e) => {
+        if (!rushPreviewModal || rushPreviewModal.classList.contains('hidden')) return;
+
+        if (e.key === 'Escape') {
+            closeRushPreview();
+        } else if (e.key === 'ArrowLeft') {
+            navigateRushPreview(-1);
+        } else if (e.key === 'ArrowRight') {
+            navigateRushPreview(1);
+        } else if (e.key === ' ') {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                if (rushPreviewPlayer.paused) {
+                    rushPreviewPlayer.play();
+                } else {
+                    rushPreviewPlayer.pause();
+                }
+            }
+        }
+    });
+}
+
+function openRushPreview(target) {
+    if (!allRushs || allRushs.length === 0) return;
+
+    let index = -1;
+    if (typeof target === 'number') {
+        index = target;
+    } else {
+        index = allRushs.findIndex(r => r.relative_path === target);
+    }
+
+    if (index < 0 || index >= allRushs.length) return;
+
+    currentPreviewIndex = index;
+    const rush = allRushs[index];
+
+    previewRushName.textContent = rush.name;
+    previewRushFolder.textContent = rush.folder || 'Dossier racine';
+    previewRushDuration.textContent = `${rush.duration}s`;
+    previewRushSize.textContent = `${rush.size_mb} Mo`;
+    previewRushCounter.textContent = `${index + 1} / ${allRushs.length}`;
+
+    updateModalSelectButton(rush);
+
+    btnPreviewPrevRush.disabled = index <= 0;
+    btnPreviewNextRush.disabled = index >= allRushs.length - 1;
+
+    const videoUrl = `${API_BASE}/rushs-media/${encodeURIComponent(rush.relative_path)}`;
+    rushPreviewPlayer.src = videoUrl;
+    rushPreviewPlayer.currentTime = 0;
+    rushPreviewPlayer.play().catch(e => {
+        console.log('Lecture auto mise en pause ou nécessitant interaction:', e);
+    });
+
+    rushPreviewModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function updateModalSelectButton(rush) {
+    if (!rush || !btnPreviewToggleSelect) return;
+    const isSelected = selectedRushs.has(rush.relative_path);
+    if (isSelected) {
+        btnPreviewToggleSelect.className = 'btn-preview-toggle-select is-selected';
+        btnPreviewSelectText.textContent = 'Sélectionné pour le montage (Retirer)';
+    } else {
+        btnPreviewToggleSelect.className = 'btn-preview-toggle-select not-selected';
+        btnPreviewSelectText.textContent = 'Sélectionner ce rush';
+    }
+}
+
+function closeRushPreview() {
+    if (!rushPreviewModal) return;
+    rushPreviewModal.classList.add('hidden');
+    if (rushPreviewPlayer) {
+        rushPreviewPlayer.pause();
+        rushPreviewPlayer.removeAttribute('src');
+        rushPreviewPlayer.load();
+    }
+    document.body.style.overflow = '';
+}
+
+function navigateRushPreview(direction) {
+    const nextIndex = currentPreviewIndex + direction;
+    if (nextIndex >= 0 && nextIndex < allRushs.length) {
+        openRushPreview(nextIndex);
+    }
+}
+
 
 function updateSelectionUI() {
     const count = selectedRushs.size;
@@ -464,6 +645,7 @@ async function loadRawRushsTable() {
         const res = await fetch(`${API_BASE}/api/rushs`);
         const data = await res.json();
         const rushs = data.rushs || [];
+        allRushs = rushs;
 
         if (rushs.length === 0) {
             rawRushsContainer.innerHTML = '<div class="loading-state">Aucun rush brut trouvé.</div>';
@@ -493,6 +675,12 @@ async function loadRawRushsTable() {
                     <td>${r.size_mb} Mo</td>
                     <td>
                         <div style="display: flex; gap: 8px; align-items: center;">
+                            <button class="btn-quick-preview" data-path="${r.relative_path}" style="padding: 6px 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" title="Regarder ce rush">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="6 4 20 12 6 20"></polygon>
+                                </svg>
+                                Aperçu
+                            </button>
                             <button class="btn-secondary btn-quick-use" data-path="${r.relative_path}" style="padding: 6px 12px; font-size: 11px;">
                                 Utiliser
                             </button>
@@ -507,6 +695,13 @@ async function loadRawRushsTable() {
 
         html += '</tbody></table>';
         rawRushsContainer.innerHTML = html;
+
+        rawRushsContainer.querySelectorAll('.btn-quick-preview').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = btn.dataset.path;
+                openRushPreview(p);
+            });
+        });
 
         rawRushsContainer.querySelectorAll('.btn-quick-use').forEach(btn => {
             btn.addEventListener('click', () => {
