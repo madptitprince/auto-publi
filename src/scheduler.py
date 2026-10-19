@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import time
 import shutil
 import datetime
 from pathlib import Path
@@ -34,12 +35,16 @@ def load_history() -> list[dict]:
     return []
 
 
-def save_history_entry(entry: dict):
-    history = load_history()
-    history.insert(0, entry)  # Prepend latest
+def save_history(history: list[dict]):
     HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=2, ensure_ascii=False)
+
+
+def save_history_entry(entry: dict):
+    history = load_history()
+    history.insert(0, entry)  # Prepend latest
+    save_history(history)
 
 
 def get_today_preview() -> dict | None:
@@ -329,13 +334,20 @@ def run_daily_publication(
         )
         report["publications"].append(insta_reel_res)
 
-        # Video TikTok (avec lieu BCHEF Bourges)
-        tiktok_res = tiktok.publish_video(
-            video_path=Path(video_res["output_video"]),
-            caption=full_caption,
-            simulation=is_simulation,
-            location_query="BCHEF Bourges",
-        )
+        # Video TikTok (avec lieu BCHEF Bourges) - Avec 2 tentatives automatiques
+        tiktok_res = None
+        for attempt in range(1, 3):
+            if attempt > 1:
+                print(f"[{timestamp_str}] Tentative TikTok {attempt}/2 apres un premier echec. Pause de 15s...")
+                time.sleep(15)
+            tiktok_res = tiktok.publish_video(
+                video_path=Path(video_res["output_video"]),
+                caption=full_caption,
+                simulation=is_simulation,
+                location_query="BCHEF Bourges",
+            )
+            if tiktok_res.get("status") in ("published", "simulated"):
+                break
         report["publications"].append(tiktok_res)
 
         # Step 6: Rotation & Archivage de la video
@@ -509,6 +521,64 @@ def generate_daily_preview(target_date: datetime.date | None = None, force: bool
 scheduler = BackgroundScheduler()
 
 
+def catchup_tiktok_publication(simulation: bool = False):
+    """Verifie si Instagram a ete publie aujourd'hui mais que TikTok est manquant ou en erreur, et le publie de maniere autonome."""
+    try:
+        import zoneinfo
+        paris_tz = zoneinfo.ZoneInfo("Europe/Paris")
+        now_paris = datetime.datetime.now(paris_tz)
+        today_str = now_paris.strftime("%Y-%m-%d")
+
+        if (now_paris.hour > 11 or (now_paris.hour == 11 and now_paris.minute >= 35)) and now_paris.hour < 23:
+            prev = get_today_preview()
+            if not prev or prev.get("date") != today_str:
+                return
+
+            pubs = prev.get("publications", [])
+            has_insta_success = any(p.get("platform") == "instagram" and p.get("status") == "published" for p in pubs)
+            has_tiktok_success = any(p.get("platform") == "tiktok" and p.get("status") == "published" for p in pubs)
+
+            if has_insta_success and not has_tiktok_success:
+                print(f"[{today_str}] Watchdog TikTok : Instagram est publie mais TikTok est manquant ou en erreur. Lancement du rattrapage...")
+                processed_video_name = prev.get("processed_video")
+                if not processed_video_name:
+                    return
+                video_file = PROCESSED_VIDEOS_DIR / processed_video_name
+                if not video_file.exists():
+                    return
+
+                caption_line = prev.get("description", "")
+                hashtags_list = prev.get("hashtags", ["#bchef", "#bourges", "#burger"])
+                full_caption = f"{caption_line}\n\n{' '.join(hashtags_list)}"
+
+                tiktok = TikTokPublisher()
+                tiktok_res = tiktok.publish_video(
+                    video_path=video_file,
+                    caption=full_caption,
+                    simulation=simulation,
+                    location_query="BCHEF Bourges",
+                )
+                print(f"[{today_str}] Resultat du rattrapage automatique TikTok : {tiktok_res.get('status')}")
+
+                new_pubs = [p for p in pubs if p.get("platform") != "tiktok"]
+                new_pubs.append(tiktok_res)
+                prev["publications"] = new_pubs
+                if tiktok_res.get("status") == "published":
+                    prev["is_published"] = True
+                save_today_preview(prev)
+
+                history = load_history()
+                for h in history:
+                    if h.get("date") == today_str:
+                        h_pubs = [p for p in h.get("publications", []) if p.get("platform") != "tiktok"]
+                        h_pubs.append(tiktok_res)
+                        h["publications"] = h_pubs
+                        save_history(history)
+                        break
+    except Exception as e_tt_catchup:
+        print(f"Erreur rattrapage TikTok : {e_tt_catchup}")
+
+
 def check_and_catchup_publication(simulation: bool = False):
     """Verifie si la publication du jour a ete manquee et lance un rattrapage automatique."""
     try:
@@ -527,6 +597,8 @@ def check_and_catchup_publication(simulation: bool = False):
                     kwargs={"is_simulation": simulation},
                     daemon=True,
                 ).start()
+            else:
+                catchup_tiktok_publication(simulation=simulation)
     except Exception as e_catchup:
         print(f"Erreur verification rattrapage : {e_catchup}")
 
@@ -560,12 +632,24 @@ def start_scheduler():
             kwargs={"is_simulation": default_simulation},
             misfire_grace_time=7200,
         )
+
+        # 3. Watchdog autonome TikTok entre 11h35 et 14h00 toutes les 15 minutes
+        scheduler.add_job(
+            func=catchup_tiktok_publication,
+            trigger=CronTrigger(minute="*/15", hour="11-14", timezone="Europe/Paris"),
+            id="watchdog_tiktok_catchup",
+            name="Watchdog rattrapage autonome TikTok",
+            replace_existing=True,
+            kwargs={"simulation": default_simulation},
+        )
+
         scheduler.start()
         print("Planificateur active :")
         print(" - Pre-generation de l'apercu du jour chaque nuit a 00h01 (Paris, grace=2h).")
         print(f" - Publication automatique chaque jour a 11h30 (Paris, simulation={default_simulation}, grace=2h).")
+        print(" - Watchdog autonome de rattrapage TikTok actif toutes les 15 minutes de 11h35 a 14h00.")
 
-        # 3. Verification d'un eventuel retard si le conteneur a demarre apres 11h30
+        # 4. Verification d'un eventuel retard si le conteneur a demarre apres 11h30
         check_and_catchup_publication(simulation=default_simulation)
 
 
