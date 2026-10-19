@@ -207,65 +207,82 @@ class TikTokPublisher:
                 time.sleep(5)
                 self._dismiss_modals(page)
 
-                # 2. Selection du fichier video
-                file_input = page.locator('input[type="file"]').first
-                try:
-                    file_input.wait_for(state="attached", timeout=15000)
-                except Exception:
-                    pass
-
-                self._dismiss_modals(page)
-                file_input.set_input_files(resolved_video_path)
-
-                # 3. Attente dynamique de televersement et d'apparition de l'editeur
+                # 2. Selection du fichier video avec retry si necessaire
                 editor = page.locator('div[contenteditable="true"]').first
                 video_ready = False
-                for _ in range(45):
-                    time.sleep(2)
-                    self._dismiss_modals(page)
-                    
-                    # Detection et gestion automatique de l'erreur "Une erreur est survenue. Merci de reessayer."
-                    retry_btn = page.locator('button:has-text("Réessayer"), button:has-text("Reessayer"), button:has-text("Retry")')
-                    if retry_btn.count() > 0 and retry_btn.first.is_visible():
-                        print("Bouton Reessayer detecte durant l'upload TikTok, clic de relance...")
-                        retry_btn.first.click(force=True)
-                        time.sleep(3)
-                        continue
 
-                    # Verifier que l'editeur est visible ET que le bouton de publication ou la couverture est monte
-                    has_editor = editor.count() > 0 and editor.is_visible()
-                    has_cover_or_post = page.locator('button[data-e2e="post_video_button"], *:has-text("Modifier la couverture"), *:has-text("Edit cover")').count() > 0
-                    is_uploading = page.locator('*:has-text("Importation..."), *:has-text("Uploading..."), *:has-text("Téléversement...")').count() > 0
+                for upload_attempt in range(3):
+                    if upload_attempt > 0:
+                        print(f"Tentative de re-televersement TikTok ({upload_attempt + 1}/3)...")
+                        page.goto("https://www.tiktok.com/tiktokstudio/upload", wait_until="domcontentloaded")
+                        time.sleep(5)
+                        self._dismiss_modals(page)
 
-                    if has_editor and has_cover_or_post and not is_uploading:
-                        video_ready = True
+                    file_input = page.locator('input[type="file"]').first
+                    try:
+                        file_input.wait_for(state="attached", timeout=15000)
+                    except Exception:
+                        pass
+
+                    file_input.set_input_files(resolved_video_path)
+
+                    # 3. Attente dynamique de televersement (sans appel agressif a _dismiss_modals pendant le flux d'upload)
+                    for wait_cycle in range(30):
+                        time.sleep(2)
+
+                        # Verifier si une erreur est survenue necessitant un rechargement
+                        has_err = page.locator('button:has-text("Réessayer"), button:has-text("Reessayer")').count() > 0
+                        if has_err:
+                            print("Erreur d'importation TikTok detectee, declenchement du rechargement...")
+                            break
+
+                        has_editor = editor.count() > 0 and editor.is_visible()
+                        has_cover_or_post = page.locator('button[data-e2e="post_video_button"], *:has-text("Modifier la couverture"), *:has-text("Edit cover")').count() > 0
+                        is_uploading = page.locator('*:has-text("Importation..."), *:has-text("Uploading..."), *:has-text("Téléversement...")').count() > 0
+
+                        if has_editor and has_cover_or_post and not is_uploading:
+                            video_ready = True
+                            break
+
+                    if video_ready:
                         break
 
                 if not video_ready:
-                    time.sleep(5)
-                    self._dismiss_modals(page)
+                    time.sleep(3)
 
-                # 4. Remplissage de la legende avec effacement garanti du nom de fichier
-                self._dismiss_modals(page)
-                if editor.count() > 0:
+                # Dismiss de la modale "Nouvelles fonctionnalités d'édition" ou tutoriels
+                try:
+                    mbtn = page.locator('button:has-text("J\'ai compris"), button:has-text("Got it")').first
+                    if mbtn.count() > 0 and mbtn.is_visible():
+                        mbtn.click(force=True)
+                        time.sleep(1)
+                except Exception:
+                    pass
+
+                # 4. Remplissage de la legende via simulation clavier Draft.js (evite le crash de l'ErrorBoundary React)
+                if editor.count() > 0 and editor.is_visible():
                     try:
                         editor.click(force=True, timeout=5000)
-                    except Exception:
-                        pass
-                    time.sleep(0.5)
-                    page.evaluate("""(text) => {
-                        const el = document.querySelector('div[contenteditable="true"]');
-                        if (el) {
-                            el.focus();
-                            document.execCommand('selectAll', false, null);
-                            document.execCommand('delete', false, null);
-                            document.execCommand('insertText', false, text);
-                        }
-                    }""", caption)
-                    time.sleep(1)
+                        time.sleep(0.5)
+                        page.keyboard.press("Control+A")
+                        time.sleep(0.2)
+                        page.keyboard.press("Backspace")
+                        time.sleep(0.3)
+
+                        caption_lines = caption.split("\n")
+                        for idx, line in enumerate(caption_lines):
+                            if line:
+                                page.keyboard.type(line, delay=15)
+                            if idx < len(caption_lines) - 1:
+                                page.keyboard.press("Enter")
+                        time.sleep(1)
+                        # Fermer l'eventuel menu deroulant de suggestions hashtags
+                        page.keyboard.press("Escape")
+                        time.sleep(0.5)
+                    except Exception as e_text:
+                        print(f"Erreur saisie texte Draft.js : {e_text}")
 
                 time.sleep(1)
-                self._dismiss_modals(page)
 
                 # 5. Selection du lieu (BCHEF Bourges)
                 if location_query:
@@ -273,7 +290,7 @@ class TikTokPublisher:
                         page.evaluate("""() => {
                             document.querySelectorAll("#react-joyride-portal, .react-joyride__overlay").forEach(e => e.remove());
                         }""")
-                        loc_input = page.locator('input.Select__searchInput, input[placeholder*="Search locations" i], input[placeholder*="location" i]').first
+                        loc_input = page.locator('input.Select__searchInput, input[placeholder*="Search locations" i], input[placeholder*="lieux" i], input[placeholder*="location" i]').first
                         if loc_input.count() > 0:
                             loc_input.click(force=True)
                             time.sleep(0.5)
@@ -298,8 +315,7 @@ class TikTokPublisher:
                     except Exception as e_loc:
                         print(f"Lieu TikTok non applique : {e_loc}")
 
-                time.sleep(2)
-                self._dismiss_modals(page)
+                time.sleep(1)
 
                 # 6. Defilement vers le bas et detection du bouton Post certifie
                 page.evaluate("""() => {
