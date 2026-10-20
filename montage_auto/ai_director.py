@@ -40,16 +40,17 @@ def get_video_duration(path: Path) -> float:
 
 def create_preview_video(video_path: Path, output_preview_path: Path) -> Path:
     """
-    Generates an ultra-lightweight 540p compressed preview (1-2 MB)
-    for fast upload and optimal visual processing by Gemini.
+    Generates an ultra-lightweight 480p 12fps compressed preview (~300-500 KB)
+    for lightning-fast encoding and upload to Gemini.
     """
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_path),
-        "-vf", "scale=-2:540",
+        "-vf", "fps=12,scale=-2:480",
         "-c:v", "libx264",
-        "-crf", "28",
+        "-crf", "30",
         "-preset", "ultrafast",
+        "-threads", "4",
         "-c:a", "aac",
         "-ar", "24000",
         "-b:a", "64k",
@@ -210,7 +211,7 @@ Reponds STRICTEMENT en format JSON valide :
 """
     for model_name in ["gemini-3-flash-preview", "gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]:
         try:
-            print(f"[AI Director] Synthese directoriale du montage avec {model_name}...")
+            print(f"[AI Director] Synthese directoriale du montage avec {model_name}...", flush=True)
             res = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
@@ -220,7 +221,7 @@ Reponds STRICTEMENT en format JSON valide :
             data["model_used"] = f"{model_name}-master-director"
             return data
         except Exception as e:
-            print(f"[AI Director] Echec synthese {model_name}: {e}")
+            print(f"[AI Director] Echec synthese {model_name}: {e}", flush=True)
             continue
 
     return create_fallback_plan(video_paths, target_duration, custom_hook, music_mode)
@@ -240,7 +241,7 @@ def analyze_and_plan_montage(
     """
     active_key = api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
     if not active_key:
-        print("Aucune clef GEMINI_API_KEY configuree.")
+        print("Aucune clef GEMINI_API_KEY configuree.", flush=True)
         return create_fallback_plan(video_paths, target_duration, custom_hook, music_mode)
 
     client = genai.Client(api_key=active_key)
@@ -248,10 +249,10 @@ def analyze_and_plan_montage(
     scratch_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        print(f"[AI Director] Analyse multimodale de {len(video_paths)} rushs...")
+        print(f"[AI Director] Analyse multimodale de {len(video_paths)} rushs...", flush=True)
         rush_analyses = []
         for i, vp in enumerate(video_paths):
-            print(f"[AI Director] Analyse du rush {i+1}/{len(video_paths)} ({vp.name})...")
+            print(f"[AI Director] Analyse du rush {i+1}/{len(video_paths)} ({vp.name})...", flush=True)
             ra = analyze_single_rush(client, vp, scratch_dir, i)
             rush_analyses.append(ra)
 
