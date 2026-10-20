@@ -106,21 +106,21 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
             "}"
         )
 
-        for model_name in ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]:
+        for model_name in ["gemini-3-flash-preview", "gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]:
             try:
                 res = client.models.generate_content(
                     model=model_name,
                     contents=[f_ref, prompt],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        http_options={"timeout": 30000},
                     )
                 )
                 data = clean_json_text(res.text)
                 data["duration"] = dur
                 data["name"] = video_path.name
                 return data
-            except Exception:
+            except Exception as e:
+                print(f"[AI Director] Echec modele {model_name} sur rush {video_path.name}: {e}")
                 continue
 
     except Exception as e:
@@ -208,7 +208,7 @@ Reponds STRICTEMENT en format JSON valide :
   ]
 }}
 """
-    for model_name in ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]:
+    for model_name in ["gemini-3-flash-preview", "gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]:
         try:
             print(f"[AI Director] Synthese directoriale du montage avec {model_name}...")
             res = client.models.generate_content(
