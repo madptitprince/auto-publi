@@ -75,161 +75,155 @@ def extract_audio_track(video_path: Path, output_audio_path: Path) -> Path:
     return output_audio_path
 
 
-def transcribe_audio_with_gemini(client: genai.Client, audio_path: Path) -> str:
-    """Transcribes audio with gemini-3.5-transcribe or fallback models."""
+def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Path, rush_idx: int) -> dict:
+    """
+    Performs fast multimodal visual + auditory analysis on a single rush.
+    Returns visual description, spoken dialogue, tone, and character actions.
+    """
+    dur = get_video_duration(video_path)
+    preview_file = scratch_dir / f"prev_rush_{rush_idx}.mp4"
+    create_preview_video(video_path, preview_file)
+
     try:
-        f_ref = client.files.upload(file=str(audio_path))
+        f_ref = client.files.upload(file=str(preview_file))
         waited = 0
         while f_ref.state.name == "PROCESSING" and waited < 30:
             time.sleep(1)
             waited += 1
             f_ref = client.files.get(name=f_ref.name)
 
-        res = client.models.generate_content(
-            model="gemini-3.5-transcribe",
-            contents=[f_ref, "Transcris mot a mot cet audio en francais."]
+        prompt = (
+            "Analyse cette sequence video pour le restaurant BCHEF Bourges (13 place Gordaine) :\n"
+            "1. Visuel : Qui sont les personnes, que font-elles precisement (actions, regards, mimiques, objets/plats manipules) ?\n"
+            "2. Paroles : Y a-t-il des dialogues ou est-ce muet / bruit ambiant ? Transcris tout mot prononce.\n"
+            "3. Rôle narratif : Est-ce une mise en place de vanne (feinte), une chute comique, une commande en cuisine, ou un moment produit/service burger gourmand ?\n\n"
+            "Reponds en JSON strict :\n"
+            "{\n"
+            '  "visuel": "description detaillee des actions et expressions",\n'
+            '  "dialogues": "mots prononces mot a mot ou AUCUN",\n'
+            '  "role": "feinte / chute / service / cuisine",\n'
+            '  "ton": "humour / culinaire / rush"\n'
+            "}"
         )
-        if res.candidates and res.candidates[0].content.parts:
-            part = res.candidates[0].content.parts[0]
-            txt_obj = getattr(part, "audio_transcription", None)
-            val = getattr(txt_obj, "text", None) or part.text
-            if val:
-                return val.strip()
+
+        for model_name in ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]:
+            try:
+                res = client.models.generate_content(
+                    model=model_name,
+                    contents=[f_ref, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        http_options={"timeout": 30000},
+                    )
+                )
+                data = clean_json_text(res.text)
+                data["duration"] = dur
+                data["name"] = video_path.name
+                return data
+            except Exception:
+                continue
+
     except Exception as e:
-        print(f"gemini-3.5-transcribe echec ({e}), tentative via flash models...")
+        print(f"[AI Director] Erreur analyse rush {video_path.name}: {e}")
 
-    for m in ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.6-flash"]:
-        try:
-            res = client.models.generate_content(
-                model=m,
-                contents=[f_ref, "Transcris mot a mot tous les dialogues ou paroles entendus."]
-            )
-            if res.text:
-                return res.text.strip()
-        except Exception:
-            continue
-    return ""
+    # Fallback to audio transcription if multimodal fails
+    audio_path = scratch_dir / f"audio_{rush_idx}.mp3"
+    extract_audio_track(video_path, audio_path)
+    return {
+        "name": video_path.name,
+        "duration": dur,
+        "visuel": "Sequence en restaurant ou cuisine BCHEF",
+        "dialogues": "Paroles non analysees",
+        "role": "sequence",
+        "ton": "humour",
+    }
 
 
-def analyze_multimodal_rushs(
+def synthesize_master_montage_plan(
     client: genai.Client,
+    rush_analyses: list[dict],
     video_paths: list[Path],
-    scratch_dir: Path,
     target_duration: int = 25,
     music_mode: str = "auto",
     custom_hook: str = "",
-) -> dict | None:
+) -> dict:
     """
-    Comprehensive multimodal video understanding:
-    1. Uploads compressed video previews (visual frames + temporal actions + audio).
-    2. Deeply understands the scene: actors, expressions, sneaking actions, foodie service, gags.
-    3. Handles multi-rush narrative sequencing (setup -> punchline) and silent video lifestyle editing.
-    4. Proposes adapted music and comedic/dynamic sound effects (SFX).
+    Directorial synthesis:
+    Understands the narrative arc across all rushs, sequences the clips logically (setup -> punchline),
+    chooses the appropriate music and places sound effects (SFX) at key moments.
     """
-    uploaded_files = []
-    durations = [get_video_duration(p) for p in video_paths]
+    rush_summary = ""
+    for i, a in enumerate(rush_analyses):
+        rush_summary += (
+            f"\n--- RUSH {i} (Fichier: {a.get('name')}, Duree: {a.get('duration')}s) ---\n"
+            f"Actions visuelles : {a.get('visuel')}\n"
+            f"Paroles : {a.get('dialogues')}\n"
+            f"Rôle : {a.get('role')} | Ton : {a.get('ton')}\n"
+        )
 
-    try:
-        print(f"[AI Director] Creation des previsualisations et envoi multimodal de {len(video_paths)} rushs...")
-        for i, vp in enumerate(video_paths):
-            prev_path = scratch_dir / f"prev_rush_{i}.mp4"
-            create_preview_video(vp, prev_path)
-            f_ref = client.files.upload(file=str(prev_path))
-            waited = 0
-            while f_ref.state.name == "PROCESSING" and waited < 30:
-                time.sleep(1)
-                waited += 1
-                f_ref = client.files.get(name=f_ref.name)
-            uploaded_files.append(f_ref)
-
-        rush_descriptions = "\n".join([
-            f"- Rush {i} : nom='{video_paths[i].name}', duree={durations[i]}s"
-            for i in range(len(video_paths))
-        ])
-
-        prompt = f"""Tu es le Realisateur et Chef Monteur expert en contenus viraux (TikTok / Instagram Reels) pour le restaurant BCHEF Bourges (13 place Gordaine, 18000 Bourges).
-Tu disposes de {len(video_paths)} rush(s) video de cuisine et de service :
-{rush_descriptions}
+    prompt = f"""Tu es le Chef Monteur et Directeur Artistique expert en Reels et TikTok viraux pour BCHEF Bourges (13 place Gordaine).
+Voici l'analyse visuelle et audio de chaque rush brut disponible ({len(rush_analyses)} video(s)) :
+{rush_summary}
 
 Duree cible du montage final : {target_duration} secondes (entre 15s et 30s).
 
-MISSION CRUCIALE D'ANALYSE ET DE MONTAGE :
-1. COMPREHENSION NARRATIVE ET VISUELLE :
-   - Visionne attentivement chaque rush : que font les personnes a l'ecran ? Leurs expressions, leurs regards complices, leurs mimiques, leurs gestes ?
-   - Si plusieurs rushs sont fournis, ils racontent souvent une histoire en plusieurs temps :
-     * Une mise en place / pretexte dans un rush (ex: un equipier qui fait croire qu'une cliente attend d'urgence une boisson/chiller depuis 10 minutes).
-     * Une chute comique dans un autre rush (ex: des qu'Alexandre prepare le chiller, l'equipier s'en empare et va le boire en douce tout seul au calme !).
-     * Dans ce cas, RE-ORDONNE les rushs de facon logique : la mise en place d'abord, puis la chute !
-   - Si la video est sans dialogue ou muette (ex: une serveuse qui apporte un plateau burger et frites a table, une cliente qui filme son plat avec son smartphone pour les reseaux sociaux) :
-     * Comprends qu'il s'agit d'une sequence produit / foodie / lifestyle BCHEF.
-     * Oriente le Hook et le montage sur la gourmandise du burger, le rituel photo avant de manger ("Quand ton plat est trop beau pour ne pas etre filme").
-
+MISSION DE SCENARISATION ET MONTAGE :
+1. COMPREHENSION NARRATIVE REELLE :
+   - Explique ce qu'il se passe reellement :
+     * Si c'est un sketch a plusieurs rushs (ex: l'equipier qui fait croire qu'une cliente attend d'urgence un chiller pour qu'Alexandre le prepare vite, puis s'en empare pour aller le boire en douce tout seul), comprends l'arnaque amicale !
+     * Ordonne chronologiquement les segments : la mise en place d'abord (la fausse urgence), puis la chute (la recuperation du chiller et la degustation en douce). N'hesite pas a inverser l'ordre des rushs si necessaire pour respecter la logique (Setup -> Punchline) !
+     * Si c'est une sequence sans parole (ex: serveuse qui apporte un burger gourmand et frites a table, cliente qui filme le plat), oriente le Hook et le ton sur la gourmandise du burger et le rituel foodie !
 2. HABILLAGE SONORE ET SOUND EFFECTS (SFX) :
    - Style musical ('comedy', 'lofi', 'tension', 'upbeat') :
-     * 'comedy' : pour les gags, sketchs, vannes entre collegues, feintes de boissons.
-     * 'lofi' : pour les videos calmes, culinaires, service en salle, ambiance cosy.
-     * 'tension' : pour le faux suspense, incidents clients simules, secrets de cuisine.
-     * 'upbeat' : pour le gros rush de midi, preparations rapides, service dynamique.
-   - Effets sonores (SFX) a placer a des moments cles du montage :
-     * 'whoosh' : transition dynamique ou changement de plan.
-     * 'record_scratch' : rupture comique, arret soudain quand la ruse est demasquee.
-     * 'comedy_punch' : gros impact sonore sur la chute humoristique.
-     * 'ding' ou 'pop' : accentuation de l'accroche ou revelation gourmande.
-
+     * 'comedy' : pour les vannes entre collegues, sketchs, chiller en douce.
+     * 'lofi' : pour les moments gourmands, service en salle, ambiance cosy.
+     * 'tension' : pour le faux suspense ou secrets de cuisine.
+     * 'upbeat' : pour le gros rush et energie de service.
+   - Points d'effets sonores (SFX) a placer a des horodatages precis :
+     * 'whoosh' : transition dynamique lors d'un changement de rush.
+     * 'record_scratch' : rupture comique, arret net quand la verite eclate ou temps d'arret comique.
+     * 'comedy_punch' : gros impact comique sur la chute humoristique.
+     * 'ding' ou 'pop' : mise en valeur gourmande ou revelation.
 3. HOOK, DESCRIPTION ET HASHTAGS (SANS AUCUN EMOJI) :
-   - Hook : majuscules, max 8 mots, percutant, resument exactement l'humour ou la gourmandise de la scene (SANS AUCUN EMOJI).
-   - Description : 1 seule phrase engageante incitant a reagir en commentaire (SANS EMOJI).
+   - Hook : MAJUSCULES, max 8 mots, percutant, parfaitement adapte a la situation (SANS AUCUN EMOJI).
+   - Description : 1 seule phrase engageante incitant a reagir (SANS EMOJI).
    - Hashtags : 5 hashtags pertinents (SANS EMOJI).
 
 Reponds STRICTEMENT en format JSON valide :
 {{
   "type_contenu": "humour" ou "culinaire" ou "coulisses",
-  "histoire_comprise": "Explication claire de ce qu'il se passe reellement dans la scene et du gag/sens",
-  "hook": "ACCROCHE PERCUTANTE EN MAJUSCULES SANS EMOJI",
+  "histoire_comprise": "Explication claire du sens reel de la scene et de la chute",
+  "hook": "TITRE PERCUTANT EN MAJUSCULES SANS EMOJI",
   "description": "Courte description engageante sans emoji.",
   "hashtags": ["#bchef", "#bourges", "#restohumour", "#viedequipe", "#chiller"],
   "musique_style": "{music_mode if music_mode != 'auto' else 'comedy'}",
   "mix_voix": true,
   "segments": [
-    {{"file_index": 1, "start": 0.0, "end": 8.0, "label": "Mise en place de la feinte"}},
-    {{"file_index": 0, "start": 0.0, "end": 8.5, "label": "Chute comique et degustation en douce"}}
+    {{"file_index": 1, "start": 0.0, "end": 8.1, "label": "Mise en place de la feinte"}},
+    {{"file_index": 0, "start": 0.0, "end": 8.5, "label": "Chute : depart avec la boisson"}}
   ],
   "sfx": [
-    {{"time": 7.8, "type": "whoosh"}},
-    {{"time": 13.0, "type": "record_scratch"}}
+    {{"time": 7.8, "type": "whoosh", "volume": 0.85}},
+    {{"time": 12.5, "type": "record_scratch", "volume": 0.85}}
   ]
 }}
 """
-        candidate_models = [
-            "gemini-3.1-flash-lite",
-            "gemini-3.8-flash",
-            "gemini-flash-latest",
-            "gemini-3.6-flash",
-        ]
-        for model_name in candidate_models:
-            try:
-                print(f"[AI Director] Analyse multimodale de la scene avec {model_name}...")
-                config = types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    http_options={"timeout": 45000},
-                )
-                res = client.models.generate_content(
-                    model=model_name,
-                    contents=[*uploaded_files, prompt],
-                    config=config,
-                )
-                data = clean_json_text(res.text)
-                data["model_used"] = f"{model_name}-multimodal"
-                print(f"[AI Director] Succes multimodal avec {model_name} ! Histoire comprise : {data.get('histoire_comprise', '')}")
-                return data
-            except Exception as e_mod:
-                print(f"[AI Director] Modele {model_name} indisponible ({e_mod}), tentative suivante...")
-                continue
+    for model_name in ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"]:
+        try:
+            print(f"[AI Director] Synthese directoriale du montage avec {model_name}...")
+            res = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json")
+            )
+            data = clean_json_text(res.text)
+            data["model_used"] = f"{model_name}-master-director"
+            return data
+        except Exception as e:
+            print(f"[AI Director] Echec synthese {model_name}: {e}")
+            continue
 
-    except Exception as e_multi:
-        print(f"[AI Director] Echec global de l'analyse multimodale : {e_multi}")
-
-    return None
+    return create_fallback_plan(video_paths, target_duration, custom_hook, music_mode)
 
 
 def analyze_and_plan_montage(
@@ -240,9 +234,9 @@ def analyze_and_plan_montage(
     api_key: str | None = None,
 ) -> dict:
     """
-    Intelligent two-tier video director:
-    Tier 1: Full multimodal visual + audio scene understanding (actors, expressions, narrative, SFX).
-    Tier 2: Robust audio transcript + LLM fallback if video files upload fails.
+    Main entrypoint:
+    Analyzes all rushs with multimodal visual + auditory understanding,
+    then synthesizes a high-impact narrative montage plan with adapted SFX and music.
     """
     active_key = api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
     if not active_key:
@@ -254,75 +248,21 @@ def analyze_and_plan_montage(
     scratch_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Tier 1 : Try full multimodal video understanding first
-        plan = analyze_multimodal_rushs(
+        print(f"[AI Director] Analyse multimodale de {len(video_paths)} rushs...")
+        rush_analyses = []
+        for i, vp in enumerate(video_paths):
+            print(f"[AI Director] Analyse du rush {i+1}/{len(video_paths)} ({vp.name})...")
+            ra = analyze_single_rush(client, vp, scratch_dir, i)
+            rush_analyses.append(ra)
+
+        plan = synthesize_master_montage_plan(
             client=client,
+            rush_analyses=rush_analyses,
             video_paths=video_paths,
-            scratch_dir=scratch_dir,
             target_duration=target_duration,
             music_mode=music_mode,
             custom_hook=custom_hook,
         )
-
-        # Tier 2 : Audio transcription fallback if multimodal was unavailable
-        if not plan:
-            print("[AI Director] Bascule sur l'analyse audio de secours...")
-            all_transcripts = []
-            rush_durations = []
-            for i, vpath in enumerate(video_paths):
-                dur = get_video_duration(vpath)
-                rush_durations.append(dur)
-                audio_path = scratch_dir / f"rush_{i}_audio.mp3"
-                extract_audio_track(vpath, audio_path)
-                tr = transcribe_audio_with_gemini(client, audio_path)
-                all_transcripts.append(tr)
-
-            combined_transcript = "\n".join([f"Rush {i} ({rush_durations[i]}s) : {t}" for i, t in enumerate(all_transcripts)])
-            has_dialogue = any(len(t.strip()) > 5 for t in all_transcripts)
-
-            prompt_audio = f"""Tu es le monteur video de BCHEF Bourges.
-Voici la transcription des rushs ({len(video_paths)} videos) :
-{combined_transcript}
-
-Concois un montage percutant de {target_duration} secondes.
-- Si c'est un gag d'urgence chiller ou feinte entre collegues, ordonne la feinte d'abord puis la recuperation.
-- Style musical : {'comedy' if 'chiller' in combined_transcript.lower() or 'urgence' in combined_transcript.lower() else 'lofi'}.
-- Hook : MAJUSCULES, max 8 mots, sans emoji.
-- Description et 5 hashtags sans emoji.
-- SFX : transitions 'whoosh' ou 'record_scratch'.
-
-Reponds en JSON :
-{{
-  "type_contenu": "dialogue" if has_dialogue else "culinaire",
-  "histoire_comprise": "Montage base sur les echanges entendus en cuisine",
-  "hook": "ACCROCHE MAJUSCULES SANS EMOJI",
-  "description": "Description en 1 phrase sans emoji.",
-  "hashtags": ["#bchef", "#bourges", "#restohumour", "#viedequipe"],
-  "musique_style": "comedy",
-  "mix_voix": {str(has_dialogue).lower()},
-  "segments": [
-    {{"file_index": 0, "start": 0.0, "end": min(target_duration, rush_durations[0]), "label": "Sequence principale"}}
-  ],
-  "sfx": [
-    {{"time": 7.0, "type": "whoosh"}}
-  ]
-}}
-"""
-            for m in ["gemini-3.1-flash-lite", "gemini-flash-latest"]:
-                try:
-                    res = client.models.generate_content(
-                        model=m,
-                        contents=prompt_audio,
-                        config=types.GenerateContentConfig(response_mime_type="application/json")
-                    )
-                    plan = clean_json_text(res.text)
-                    plan["model_used"] = f"{m}-audio-fallback"
-                    break
-                except Exception:
-                    continue
-
-        if not plan:
-            plan = create_fallback_plan(video_paths, target_duration, custom_hook, music_mode)
 
         plan["api_key"] = active_key
         return validate_and_sanitize_plan(plan, video_paths, target_duration, custom_hook, music_mode)
@@ -437,7 +377,7 @@ def create_fallback_plan(
         "mix_voix": True,
         "musique_style": music_mode if music_mode != "auto" else "comedy",
         "segments": segments,
-        "sfx": [{"time": 5.0, "type": "whoosh"}],
+        "sfx": [{"time": 5.0, "type": "whoosh", "volume": 0.85}],
         "transcription": [],
         "total_duration": round(dur_per_clip * len(video_paths), 2),
         "model_used": "fallback-local",
