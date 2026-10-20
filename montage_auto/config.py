@@ -16,13 +16,14 @@ DATA_DIR = BASE_DIR / "data"
 TEMP_DIR = BASE_DIR / "scratch"
 ASSETS_DIR = BASE_DIR / "assets"
 MUSIC_DIR = ASSETS_DIR / "music"
+SFX_DIR = ASSETS_DIR / "sfx"
 FONTS_DIR = PROJECT_ROOT / "assets" / "fonts"
 
 UPLOADS_VIDEOS_DIR = PROJECT_ROOT / "uploads" / "videos"
 
 HISTORY_FILE = DATA_DIR / "history.json"
 
-for d in [RUSHS_DIR, OUTPUTS_DIR, DATA_DIR, TEMP_DIR, ASSETS_DIR, MUSIC_DIR]:
+for d in [RUSHS_DIR, OUTPUTS_DIR, DATA_DIR, TEMP_DIR, ASSETS_DIR, MUSIC_DIR, SFX_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 if not HISTORY_FILE.exists():

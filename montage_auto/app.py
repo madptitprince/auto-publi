@@ -218,6 +218,8 @@ def run_montage_background_job(job_id: str, request_data: MontageRequest):
             "sources": [p.name for p in video_paths],
             "transcription_count": len(plan.get("transcription", [])),
             "burn_hook": bool(request_data.burn_hook),
+            "histoire_comprise": plan.get("histoire_comprise", ""),
+            "sfx_count": len(plan.get("sfx", [])),
         }
         add_history_entry(entry)
 

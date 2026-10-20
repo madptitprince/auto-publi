@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 
-from montage_auto.config import GEMINI_API_KEY, FONTS_DIR, MUSIC_DIR, TEMP_DIR
+from montage_auto.config import GEMINI_API_KEY, FONTS_DIR, MUSIC_DIR, SFX_DIR, TEMP_DIR
 
 
 class WordTiming(BaseModel):
@@ -334,6 +334,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return output_ass_path
 
 
+def get_sfx_path(sfx_name: str) -> Path | None:
+    """Returns absolute path to matching SFX audio file."""
+    if not sfx_name:
+        return None
+    clean = sfx_name.lower().strip().replace(" ", "_").replace("-", "_")
+    direct = SFX_DIR / f"{clean}.mp3"
+    if direct.exists():
+        return direct
+    if "scratch" in clean:
+        return SFX_DIR / "record_scratch.mp3"
+    elif any(k in clean for k in ("boom", "punch", "chute", "impact", "bass")):
+        return SFX_DIR / "comedy_punch.mp3"
+    elif any(k in clean for k in ("whoosh", "trans", "sweep", "cut")):
+        return SFX_DIR / "whoosh.mp3"
+    elif any(k in clean for k in ("ding", "bell", "chime")):
+        return SFX_DIR / "ding.mp3"
+    elif any(k in clean for k in ("pop", "bubble", "click")):
+        return SFX_DIR / "pop.mp3"
+    # Fallback to whoosh
+    default_sfx = SFX_DIR / "whoosh.mp3"
+    return default_sfx if default_sfx.exists() else None
+
+
 def select_music_file(style: str) -> Path | None:
     """Finds best matching audio track for requested mood."""
     if not style or style.lower() in ("none", "aucun", "sans"):
@@ -341,20 +364,28 @@ def select_music_file(style: str) -> Path | None:
 
     style = style.lower().strip()
     music_map = {
-        "lofi": "friday.mp3",
-        "upbeat": "monday.mp3",
-        "comedy": "saturday.mp3",
-        "tension": "sunday.mp3",
-        "modern": "wednesday.mp3",
-        "chill": "thursday.mp3",
-        "pop": "tuesday.mp3",
+        "lofi": "lofi.mp3",
+        "chill": "lofi.mp3",
+        "culinaire": "lofi.mp3",
+        "food": "lofi.mp3",
+        "comedy": "comedy.mp3",
+        "humour": "comedy.mp3",
+        "humor": "comedy.mp3",
+        "tension": "tension.mp3",
+        "drama": "tension.mp3",
+        "upbeat": "upbeat.mp3",
+        "pop": "upbeat.mp3",
+        "trend": "upbeat.mp3",
+        "modern": "upbeat.mp3",
     }
-    filename = music_map.get(style, "friday.mp3")
+    filename = music_map.get(style, "lofi.mp3")
     target = MUSIC_DIR / filename
     if target.exists():
         return target
 
-    # Fallback to any mp3
+    # Fallback to comedy or any available mp3
+    if (MUSIC_DIR / "comedy.mp3").exists():
+        return MUSIC_DIR / "comedy.mp3"
     available = list(MUSIC_DIR.glob("*.mp3"))
     return available[0] if available else None
 
@@ -503,74 +534,77 @@ def render_montage(
         if progress_callback:
             progress_callback(70, "Traitement sonore et habillage musical...")
 
-        # Step 5: Audio configuration
+        # Step 5: Audio configuration with SFX
         mix_voix = plan.get("mix_voix", True)
         music_style = plan.get("musique_style", "lofi")
         music_path = select_music_file(music_style)
+        sfx_events = plan.get("sfx", [])
+
+        # Filter valid SFX events
+        valid_sfx = []
+        for ev in sfx_events:
+            s_type = ev.get("type") or ev.get("sound", "whoosh")
+            s_file = get_sfx_path(s_type)
+            s_time = float(ev.get("time", 0.0))
+            if s_file and s_file.exists() and s_time >= 0:
+                valid_sfx.append({
+                    "file": s_file,
+                    "time": s_time,
+                    "volume": float(ev.get("volume", 0.85)),
+                })
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        cmd_render = ["ffmpeg", "-y", "-i", str(concat_out)]
+        fc_audio_parts = []
+        mix_inputs = []
+
         if music_path and music_path.exists():
+            cmd_render.extend(["-stream_loop", "-1", "-i", str(music_path)])
             if mix_voix:
-                # Keep speech with loudnorm and add soft ducked background music
-                filter_complex = (
-                    f"[0:v]{video_filters}[outv];"
-                    f"[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[a_norm];"
-                    f"[1:a]volume=0.18[a_bg];"
-                    f"[a_norm][a_bg]amix=inputs=2:duration=first:dropout_transition=2[outa]"
-                )
-                cmd_render = [
-                    "ffmpeg", "-y",
-                    "-i", str(concat_out),
-                    "-stream_loop", "-1",
-                    "-i", str(music_path),
-                    "-filter_complex", filter_complex,
-                    "-map", "[outv]",
-                    "-map", "[outa]",
-                    "-c:v", "libx264",
-                    "-preset", "medium",
-                    "-crf", "20",
-                    "-c:a", "aac",
-                    "-b:a", "192k",
-                    "-movflags", "+faststart",
-                    "-shortest",
-                    str(output_path),
-                ]
+                fc_audio_parts.append("[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[a_speech]")
+                fc_audio_parts.append("[1:a]volume=0.18[a_music]")
+                fc_audio_parts.append("[a_speech][a_music]amix=inputs=2:duration=first:dropout_transition=2[a_base]")
             else:
-                # Replace kitchen noise with full background music
-                filter_complex = f"[0:v]{video_filters}[outv];[1:a]volume=0.85[outa]"
-                cmd_render = [
-                    "ffmpeg", "-y",
-                    "-i", str(concat_out),
-                    "-stream_loop", "-1",
-                    "-i", str(music_path),
-                    "-filter_complex", filter_complex,
-                    "-map", "[outv]",
-                    "-map", "[outa]",
-                    "-c:v", "libx264",
-                    "-preset", "medium",
-                    "-crf", "20",
-                    "-c:a", "aac",
-                    "-b:a", "192k",
-                    "-movflags", "+faststart",
-                    "-shortest",
-                    str(output_path),
-                ]
+                fc_audio_parts.append("[1:a]volume=0.85[a_base]")
+            mix_inputs.append("[a_base]")
+            next_input_idx = 2
         else:
-            # Voice only / no background track
-            cmd_render = [
-                "ffmpeg", "-y",
-                "-i", str(concat_out),
-                "-vf", video_filters,
-                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-                "-c:v", "libx264",
-                "-preset", "medium",
-                "-crf", "20",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                "-movflags", "+faststart",
-                str(output_path),
-            ]
+            if mix_voix:
+                fc_audio_parts.append("[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[a_base]")
+                mix_inputs.append("[a_base]")
+            next_input_idx = 1
+
+        # Add SFX inputs and filters
+        for i, sfx_item in enumerate(valid_sfx):
+            cmd_render.extend(["-i", str(sfx_item["file"])])
+            delay_ms = int(sfx_item["time"] * 1000)
+            vol = sfx_item["volume"]
+            fc_audio_parts.append(f"[{next_input_idx + i}:a]adelay={delay_ms}|{delay_ms},volume={vol}[sfx_{i}]")
+            mix_inputs.append(f"[sfx_{i}]")
+
+        if len(mix_inputs) > 1:
+            fc_audio_parts.append(f"{''.join(mix_inputs)}amix=inputs={len(mix_inputs)}:duration=first:dropout_transition=0[outa]")
+        elif len(mix_inputs) == 1:
+            fc_audio_parts.append(f"{mix_inputs[0]}anull[outa]")
+        else:
+            fc_audio_parts.append("aevalsrc=0:d=1[outa]")
+
+        filter_complex = f"[0:v]{video_filters}[outv];" + ";".join(fc_audio_parts)
+
+        cmd_render.extend([
+            "-filter_complex", filter_complex,
+            "-map", "[outv]",
+            "-map", "[outa]",
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "20",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart",
+            "-shortest",
+            str(output_path),
+        ])
 
         print(f"Rendu final en cours vers {output_path.name}...")
         res_render = subprocess.run(cmd_render, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
