@@ -306,6 +306,22 @@ async def send_to_publishing_queue(entry_id: str):
     destination_file = UPLOADS_VIDEOS_DIR / fname
     shutil.copy2(source_file, destination_file)
 
+    # Save sidecar metadata so publishing platform reuses original verified hook and description
+    sidecar_file = destination_file.with_suffix(".json")
+    try:
+        with open(sidecar_file, "w", encoding="utf-8") as f_meta:
+            json.dump({
+                "hook": target_entry.get("hook", "").upper().strip(),
+                "description": target_entry.get("description", ""),
+                "hashtags": target_entry.get("hashtags", []),
+                "contexte": target_entry.get("contexte") or target_entry.get("histoire_comprise", ""),
+                "transcription": target_entry.get("transcription", ""),
+                "source": "montage_studio",
+                "montage_id": entry_id,
+            }, f_meta, ensure_ascii=False, indent=2)
+    except Exception as e_meta:
+        print(f"Erreur ecriture sidecar metadata {sidecar_file}: {e_meta}")
+
     return {
         "success": True,
         "message": f"Vidéo {fname} transmise avec succès à la file d'attente de publication (Port 8000).",

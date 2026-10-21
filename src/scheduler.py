@@ -458,19 +458,22 @@ def generate_daily_preview(target_date: datetime.date | None = None, force: bool
             with open(cache_file, "r", encoding="utf-8") as f:
                 cdata = json.load(f)
                 if cdata.get("video_name") == video_to_process.name and "analysis" in cdata:
-                    ai_data = cdata["analysis"]
+                    cached_analysis = cdata["analysis"]
+                    # Do not reuse fallback_error from cache
+                    if cached_analysis.get("source") != "fallback_error":
+                        ai_data = cached_analysis
         except Exception:
             pass
 
     if not ai_data:
-        print(f"[{date_str}] Analyse IA Gemini de la video {video_to_process.name}...")
+        print(f"[{date_str}] Analyse IA Gemini de la video {video_to_process.name}...", flush=True)
         ai_data = analyze_video_with_gemini(video_to_process)
         try:
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump({"video_name": video_to_process.name, "analysis": ai_data}, f, ensure_ascii=False, indent=2)
         except Exception as e_cache:
-            print(f"Erreur sauvegarde cache IA : {e_cache}")
+            print(f"Erreur sauvegarde cache IA : {e_cache}", flush=True)
 
     hook_text = ai_data.get("hook", "Le rendez-vous des gourmands chez BCHEF Bourges !").upper().strip()
     caption_line = ai_data.get("description", "Rejoignez-nous chez BCHEF Bourges au 13 place Gordaine !")

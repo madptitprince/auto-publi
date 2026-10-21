@@ -26,15 +26,58 @@ def analyze_video_with_gemini(video_path: Path, api_key: str | None = None) -> d
     Gemini 3.8 Flash transcribes the exact spoken words, understands the scene context,
     and crafts viral hooks, descriptions and hashtags tailored for BCHEF Bourges.
     """
+    # 1. Check if sidecar metadata exists from montage studio
+    sidecar_json = video_path.with_suffix(".json")
+    if sidecar_json.exists():
+        try:
+            with open(sidecar_json, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+                if meta.get("hook"):
+                    print(f"Utilisation des métadonnées sidecar pour {video_path.name}", flush=True)
+                    return {
+                        "source": "montage_studio_metadata",
+                        "transcription": meta.get("transcription", ""),
+                        "contexte": meta.get("contexte", ""),
+                        "hook": meta.get("hook", "").upper().strip(),
+                        "description": meta.get("description", ""),
+                        "hashtags": meta.get("hashtags", ["#bchef", "#bourges", "#restauration", "#viedequipe"]),
+                    }
+        except Exception as e_sidecar:
+            print(f"Erreur lecture sidecar JSON : {e_sidecar}", flush=True)
+
+    # 2. Check if metadata exists in montage_auto history
+    for h_path in [
+        Path(__file__).resolve().parent.parent / "montage_auto" / "data" / "history.json",
+        Path("/app/montage_auto/data/history.json"),
+        Path("montage_auto/data/history.json"),
+    ]:
+        if h_path.exists():
+            try:
+                with open(h_path, "r", encoding="utf-8") as f:
+                    hist = json.load(f)
+                    for entry in hist:
+                        if entry.get("filename") == video_path.name and entry.get("hook"):
+                            print(f"Metadonnees trouvees dans l'historique de montage pour {video_path.name}", flush=True)
+                            return {
+                                "source": "montage_studio_history",
+                                "transcription": entry.get("transcription", ""),
+                                "contexte": entry.get("contexte") or entry.get("histoire_comprise", ""),
+                                "hook": entry.get("hook", "").upper().strip(),
+                                "description": entry.get("description", ""),
+                                "hashtags": entry.get("hashtags", ["#bchef", "#bourges", "#restauration", "#viedequipe"]),
+                            }
+            except Exception:
+                pass
+
     active_key = api_key or os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
 
     if not active_key:
-        print("Aucune clef GEMINI_API_KEY detectee. Mode fallback.")
+        print("Aucune clef GEMINI_API_KEY detectee. Mode fallback.", flush=True)
         return {
             "source": "fallback",
             "transcription": "Transcription non disponible (clef manquante)",
-            "contexte": "Coulisses de la cuisine du restaurant BCHEF Bourges",
-            "hook": "L'equipe BCHEF Bourges avant le grand rush du midi",
+            "contexte": "Coulisses du restaurant BCHEF Bourges",
+            "hook": "L'EQUIPE BCHEF BOURGES PLACE GORDAINE",
             "description": "L'ambiance est toujours au rendez-vous chez BCHEF Bourges place Gordaine.",
             "hashtags": ["#bchef", "#bourges", "#burgerlovers", "#restobourges", "#foodiefr"],
         }
@@ -42,10 +85,10 @@ def analyze_video_with_gemini(video_path: Path, api_key: str | None = None) -> d
     video_file = None
     try:
         client = genai.Client(api_key=active_key)
-        print(f"Envoi de la video {video_path.name} a l'API Gemini File...")
+        print(f"Envoi de la video {video_path.name} a l'API Gemini File...", flush=True)
 
         video_file = client.files.upload(file=str(video_path))
-        print(f"Fichier envoye : {video_file.name}, statut={video_file.state}")
+        print(f"Fichier envoye : {video_file.name}, statut={video_file.state}", flush=True)
 
         # Wait if video is being processed by Gemini
         max_wait = 45
@@ -77,27 +120,26 @@ def analyze_video_with_gemini(video_path: Path, api_key: str | None = None) -> d
             "}"
         )
 
-        candidate_models = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"]
+        candidate_models = ["gemini-3-flash-preview", "gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"]
         data = None
         last_error = None
 
         for model_name in candidate_models:
             try:
-                print(f"Tentative d'analyse avec {model_name}...")
+                print(f"Tentative d'analyse avec {model_name}...", flush=True)
                 res = client.models.generate_content(
                     model=model_name,
                     contents=[video_file, prompt],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        http_options={"timeout": 30000},
                     ),
                 )
                 data = clean_json_response(res.text)
                 data["source"] = f"{model_name}-full-video"
-                print(f"Analyse reussie avec {model_name} !")
+                print(f"Analyse reussie avec {model_name} !", flush=True)
                 break
             except Exception as model_err:
-                print(f"Echec avec {model_name} : {model_err}")
+                print(f"Echec avec {model_name} : {model_err}", flush=True)
                 last_error = str(model_err)
                 continue
 
@@ -107,14 +149,14 @@ def analyze_video_with_gemini(video_path: Path, api_key: str | None = None) -> d
         return data
 
     except Exception as e:
-        print(f"Erreur lors de l'analyse video complete par Gemini: {e}")
+        print(f"Erreur lors de l'analyse video complete par Gemini: {e}", flush=True)
         return {
             "source": "fallback_error",
             "error": str(e),
-            "transcription": "Erreur lors de la recuperation audio",
-            "contexte": "Coulisses du restaurant BCHEF",
-            "hook": "Quand la responsable n'est pas la pendant le rush",
-            "description": "Decouvrez l'envers du decor et l'ambiance chez BCHEF Bourges place Gordaine.",
+            "transcription": "Moment capture au restaurant BCHEF Bourges",
+            "contexte": "Coulisses et quotidien du restaurant BCHEF",
+            "hook": "L'EQUIPE DU RESTAURANT BCHEF BOURGES",
+            "description": "Retrouvez l'equipe et les burgers gourmands au 13 place Gordaine a Bourges.",
             "hashtags": ["#bchef", "#bourges", "#restauration", "#viedequipe", "#burgerbourges"],
         }
     finally:
