@@ -141,25 +141,31 @@ def analyze_video_with_gemini(video_path: Path, api_key: str | None = None) -> d
                 extra_ctx = f" (Information indicative sur la scene : {hint})"
 
         prompt = (
-            "Tu es le Community Manager professionnel et Directeur Artistique de BCHEF Bourges (13 place Gordaine, 18000 Bourges). "
-            f"Visionne et ecoute attentivement cette video complete (visuel, jeu d'acteur, expressions, actions et bande-son/voix/musique){extra_ctx}. "
-            "Consignes strictes : "
-            "1. Retranscris precisement les dialogues ou paroles entendues. "
+            "Tu es le Community Manager professionnel et Directeur Artistique officiel de BCHEF Bourges (13 place Gordaine, 18000 Bourges). "
+            f"Visionne et ecoute attentivement cette video complete (visuel, jeu d'acteur, expressions, actions et bande-son/voix/musique){extra_ctx}.\n\n"
+            "ADN EDITORIAL DE LA PAGE BCHEF BOURGES (base sur les posts historiques a plus fort engagement) :\n"
+            "- Ton : Sitcom de restaurant, coulisses authentiques, second degre, auto-derision de l'equipe (Aly, Laindy, les equipiers en cuisine et au comptoir) et realite du rush en restauration.\n"
+            "- A PROSCRIRE ABSOLUMENT : Le ton institutionnel, publicitaire ou corporate type brochure commerciale ('Venez deguster nos burgers prepares avec passion', 'Nouvelle carte meme plaisir') qui genere 0 engagement.\n"
+            "- A PRIVILEGIER : L'humour de travail universel (le coup de feu, les pauses impossibles, les corvées refilees aux collegues, les clients inattendus, les departs surprises).\n\n"
+            "CONSIGNES DE REDACTION :\n"
+            "1. Transcription : Retranscris precisement les dialogues ou paroles entendues. "
             "Si la video est sans parole (gag visuel, mime, reaction, musique de fond, tendance TikTok), "
-            "indique dans 'transcription' : 'Gag visuel sans parole' suivi d'un bref descriptif de l'action ou musique. "
-            "2. Resume le contexte de la scene en une phrase explicite (comprends le second degre, l'humour en cuisine, les reactions de l'equipe ou la mise en valeur des produits BCHEF). "
-            "3. Concois un texte d'accroche (Hook) pour le haut de l'ecran : court (8 a 10 mots max), en MAJUSCULES, "
-            "dynamique, percutant pour TikTok / Reels, parfaitement adapte a la situation comique ou au sujet, et SANS AUCUN EMOJI. "
-            "Tu as toute liberte pour concevoir le Hook le plus captivant et viral pour cette video. "
-            "4. Rédige une description de post en 1 seule ligne engageante, invitant a reagir en commentaire, SANS AUCUN EMOJI. "
-            "5. Fournis exactement 5 hashtags pertinents, sans emoji. "
+            "indique dans 'transcription' : 'Gag visuel sans parole' suivi d'un bref descriptif de l'action ou musique.\n"
+            "2. Contexte : Resume le sens reel de la scene en une phrase explicite (comprends le second degre, le comique de situation ou la mise en valeur foodie).\n"
+            "3. Hook (haut d'ecran) : 6 a 9 mots max, STRICTEMENT EN MAJUSCULES, percutant, concu pour stopper le scroll sur Reels/TikTok, parfaitement adapte a la scene, SANS AUCUN EMOJI.\n"
+            "   Exemples de style : 'QUAND LE RUSH COMMENCE ET QUE TON COLLEGUE DISPARAIT', 'QUAND UNE CLIENTE DEPASSE TOTALEMENT LES BORNES', 'A PEINE ARRIVEE DEJA UN DOSSIER A TRAITER'.\n"
+            "4. Description : Strictement 1 seule ligne, directe et naturelle, SANS AUCUN EMOJI. Choisis parmi les 3 formats qui cartonnent sur la page :\n"
+            "   - Format Question / Debat : 'Et vous, vous arrivez a tenir combien de temps sans faire de pause en plein coup de feu ?'\n"
+            "   - Format Tag collegue : 'Tague la personne de ton equipe a qui tu refiles toujours cette corvee en commentaire.'\n"
+            "   - Format Punchline / Auto-derision : 'J'ai absolument rien vu pendant tout le service.' ou 'Chaque equipe a sa superstar qu'elle est toujours contente de voir.'\n"
+            "5. Hashtags : Exactement 5 hashtags cibles sans emoji parmi #bchef #bourges #restauration #viedequipe #humour #convivial #burger.\n\n"
             "Reponds STRICTEMENT en format JSON valide :\n"
             "{\n"
             '  "transcription": "dialogue exact ou description du gag sonore/visuel",\n'
             '  "contexte": "explication de la situation et de l\'humour",\n'
             '  "hook": "ACCROCHE ECRAN PERCUTANTE EN MAJUSCULES SANS EMOJI",\n'
             '  "description": "description en 1 ligne sans emoji",\n'
-            '  "hashtags": ["#bchef", "#bourges", "#tag3", "#tag4", "#tag5"]\n'
+            '  "hashtags": ["#bchef", "#bourges", "#restauration", "#viedequipe", "#humour"]\n'
             "}"
         )
 

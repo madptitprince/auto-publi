@@ -185,10 +185,12 @@ MISSION DE SCENARISATION ET MONTAGE :
      * 'record_scratch' : rupture comique, arret net quand la verite eclate ou temps d'arret comique.
      * 'comedy_punch' : gros impact comique sur la chute humoristique.
      * 'ding' ou 'pop' : mise en valeur gourmande ou revelation.
-3. HOOK, DESCRIPTION ET HASHTAGS (SANS AUCUN EMOJI) :
-   - Hook : MAJUSCULES, max 8 mots, percutant, parfaitement adapte a la situation (SANS AUCUN EMOJI).
-   - Description : 1 seule phrase engageante incitant a reagir (SANS EMOJI).
-   - Hashtags : 5 hashtags pertinents (SANS EMOJI).
+3. HOOK, DESCRIPTION ET HASHTAGS (STYLE OFFICIEL BOURGES, SANS AUCUN EMOJI) :
+   - Hook : MAJUSCULES, 6 a 9 mots max, percutant, stoppant le scroll (SANS AUCUN EMOJI).
+     Exemples reels qui fonctionnent : 'QUAND LE RUSH COMMENCE ET QUE TON COLLEGUE DISPARAIT', 'QUAND UNE CLIENTE DEPASSE TOTALEMENT LES BORNES', 'A PEINE ARRIVEE DEJA UN DOSSIER A TRAITER'.
+   - Description : 1 seule phrase courte et naturelle incitant a l'interaction (SANS EMOJI et JAMAIS de blabla corporate type brochure).
+     Exemples reels : 'Et vous, vous arrivez a tenir combien de temps sans faire de pause en plein coup de feu ?' ou 'Tague la personne de ton equipe a qui tu refiles toujours cette corvee en commentaire.'
+   - Hashtags : 5 hashtags cibles parmi #bchef #bourges #restauration #viedequipe #humour #convivial #burger (SANS EMOJI).
 
 Reponds STRICTEMENT en format JSON valide :
 {{
@@ -196,7 +198,7 @@ Reponds STRICTEMENT en format JSON valide :
   "histoire_comprise": "Explication claire du sens reel de la scene et de la chute",
   "hook": "TITRE PERCUTANT EN MAJUSCULES SANS EMOJI",
   "description": "Courte description engageante sans emoji.",
-  "hashtags": ["#bchef", "#bourges", "#restohumour", "#viedequipe", "#chiller"],
+  "hashtags": ["#bchef", "#bourges", "#restauration", "#viedequipe", "#humour"],
   "musique_style": "{music_mode if music_mode != 'auto' else 'comedy'}",
   "mix_voix": true,
   "segments": [
