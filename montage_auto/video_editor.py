@@ -91,120 +91,128 @@ def align_subtitles_to_audio(
         )
 
         candidate_models = [
-            "gemini-3.1-flash-lite",
+            "gemini-3-flash-preview",
+            "gemini-3.7-flash",
             "gemini-3.8-flash",
-            "gemini-2.5-flash",
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite",
             "gemini-flash-latest",
         ]
 
         for model_name in candidate_models:
-            try:
-                print(f"[Subtitles] Alignement audio mot-a-mot avec {model_name}...")
-                res = client.models.generate_content(
-                    model=model_name,
-                    contents=[f_ref, prompt],
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=AudioTranscriptionWords,
-                    ),
-                )
-                data = json.loads(res.text)
-                if not data.get("has_speech", True) or not data.get("cues"):
-                    print("[Subtitles] Aucune voix humaine detectee dans le montage.")
-                    return []
+            raw_cues = None
+            for attempt in range(2):
+                try:
+                    print(f"[Subtitles] Alignement audio mot-a-mot avec {model_name} (tentative {attempt+1})...")
+                    res = client.models.generate_content(
+                        model=model_name,
+                        contents=[f_ref, prompt],
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=AudioTranscriptionWords,
+                        ),
+                    )
+                    data = json.loads(res.text)
+                    if not data.get("has_speech", True) or not data.get("cues"):
+                        print("[Subtitles] Aucune voix humaine detectee dans le montage.")
+                        return []
 
-                raw_cues = data.get("cues", [])
-                print(f"[Subtitles] {len(raw_cues)} phrases synchronisees avec succes via {model_name} !")
+                    raw_cues = data.get("cues", [])
+                    print(f"[Subtitles] {len(raw_cues)} phrases synchronisees avec succes via {model_name} !")
+                    break
+                except Exception as e:
+                    print(f"[Subtitles] Echec avec {model_name} (tentative {attempt+1}) : {e}")
+                    if attempt == 0:
+                        time.sleep(1.5)
 
-                # Process phrases and words
-                processed_phrases = []
-                for c in raw_cues:
-                    raw_phrase = re.sub(r"[^\w\s\-\'\,\.\!\?]", "", str(c.get("phrase", ""))).strip().upper()
-                    raw_words = c.get("words", [])
+            if not raw_cues:
+                continue
 
-                    clean_words = []
-                    for w in raw_words:
-                        w_txt = re.sub(r"[^\w\s\-\']", "", str(w.get("word", ""))).strip().upper()
-                        if not w_txt:
-                            continue
-                        w_st = round(float(w.get("start", 0.0)), 2)
-                        w_et = round(float(w.get("end", w_st + 0.2)), 2)
-                        w_et = max(w_et, w_st + 0.10)
-                        w_st = min(w_st, target_duration)
-                        w_et = min(w_et, target_duration)
+            # Process phrases and words
+            processed_phrases = []
+            for c in raw_cues:
+                raw_phrase = re.sub(r"[^\w\s\-\'\,\.\!\?]", "", str(c.get("phrase", ""))).strip().upper()
+                raw_words = c.get("words", [])
+
+                clean_words = []
+                for w in raw_words:
+                    w_txt = re.sub(r"[^\w\s\-\']", "", str(w.get("word", ""))).strip().upper()
+                    if not w_txt:
+                        continue
+                    w_st = round(float(w.get("start", 0.0)), 2)
+                    w_et = round(float(w.get("end", w_st + 0.2)), 2)
+                    w_et = max(w_et, w_st + 0.10)
+                    w_st = min(w_st, target_duration)
+                    w_et = min(w_et, target_duration)
+                    clean_words.append({
+                        "word": w_txt,
+                        "start": w_st,
+                        "end": w_et,
+                    })
+
+                # Fallback if phrase text exists but words list was omitted by model
+                if not clean_words and raw_phrase:
+                    tokens = raw_phrase.split()
+                    p_st = round(float(c.get("start", 0.0)), 2)
+                    p_et = round(float(c.get("end", p_st + 1.2)), 2)
+                    p_dur = max(p_et - p_st, 0.4)
+                    step = p_dur / max(len(tokens), 1)
+                    for idx, tok in enumerate(tokens):
+                        w_st = round(p_st + idx * step, 2)
+                        w_et = round(w_st + step, 2)
                         clean_words.append({
-                            "word": w_txt,
+                            "word": tok,
                             "start": w_st,
                             "end": w_et,
                         })
 
-                    # Fallback if phrase text exists but words list was omitted by model
-                    if not clean_words and raw_phrase:
-                        tokens = raw_phrase.split()
-                        p_st = round(float(c.get("start", 0.0)), 2)
-                        p_et = round(float(c.get("end", p_st + 1.2)), 2)
-                        p_dur = max(p_et - p_st, 0.4)
-                        step = p_dur / max(len(tokens), 1)
-                        for idx, tok in enumerate(tokens):
-                            w_st = round(p_st + idx * step, 2)
-                            w_et = round(w_st + step, 2)
-                            clean_words.append({
-                                "word": tok,
-                                "start": w_st,
-                                "end": w_et,
-                            })
+                if not clean_words:
+                    continue
 
-                    if not clean_words:
-                        continue
+                # Sort words
+                clean_words.sort(key=lambda x: x["start"])
 
-                    # Sort words
-                    clean_words.sort(key=lambda x: x["start"])
+                # Split long phrases (> 4 words) into chunks of 2 to 3 words
+                if len(clean_words) <= 4:
+                    chunks = [clean_words]
+                else:
+                    chunks = []
+                    for i in range(0, len(clean_words), 3):
+                        chunk_slice = clean_words[i:i + 3]
+                        if chunk_slice:
+                            chunks.append(chunk_slice)
 
-                    # Split long phrases (> 4 words) into chunks of 2 to 3 words
-                    if len(clean_words) <= 4:
-                        chunks = [clean_words]
-                    else:
-                        chunks = []
-                        for i in range(0, len(clean_words), 3):
-                            chunk_slice = clean_words[i:i + 3]
-                            if chunk_slice:
-                                chunks.append(chunk_slice)
+                for chunk in chunks:
+                    p_start = chunk[0]["start"]
+                    p_end = chunk[-1]["end"]
+                    if p_end > p_start and p_start < target_duration:
+                        p_end = max(p_end, p_start + 0.35)
+                        p_end = min(p_end, target_duration)
+                        phrase_text = " ".join(w["word"] for w in chunk)
+                        processed_phrases.append({
+                            "phrase": phrase_text,
+                            "start": p_start,
+                            "end": p_end,
+                            "words": chunk,
+                        })
 
-                    for chunk in chunks:
-                        p_start = chunk[0]["start"]
-                        p_end = chunk[-1]["end"]
-                        if p_end > p_start and p_start < target_duration:
-                            p_end = max(p_end, p_start + 0.35)
-                            p_end = min(p_end, target_duration)
-                            phrase_text = " ".join(w["word"] for w in chunk)
-                            processed_phrases.append({
-                                "phrase": phrase_text,
-                                "start": p_start,
-                                "end": p_end,
-                                "words": chunk,
-                            })
+            # Sort phrases chronologically
+            processed_phrases.sort(key=lambda x: x["start"])
 
-                # Sort phrases chronologically
-                processed_phrases.sort(key=lambda x: x["start"])
-
-                # Prevent phrase overlaps
-                for i in range(len(processed_phrases) - 1):
-                    if processed_phrases[i]["end"] > processed_phrases[i + 1]["start"]:
-                        processed_phrases[i]["end"] = max(
-                            processed_phrases[i]["start"] + 0.25,
-                            processed_phrases[i + 1]["start"] - 0.02
+            # Prevent phrase overlaps
+            for i in range(len(processed_phrases) - 1):
+                if processed_phrases[i]["end"] > processed_phrases[i + 1]["start"]:
+                    processed_phrases[i]["end"] = max(
+                        processed_phrases[i]["start"] + 0.25,
+                        processed_phrases[i + 1]["start"] - 0.02
+                    )
+                    if processed_phrases[i]["words"]:
+                        processed_phrases[i]["words"][-1]["end"] = min(
+                            processed_phrases[i]["words"][-1]["end"],
+                            processed_phrases[i]["end"]
                         )
-                        if processed_phrases[i]["words"]:
-                            processed_phrases[i]["words"][-1]["end"] = min(
-                                processed_phrases[i]["words"][-1]["end"],
-                                processed_phrases[i]["end"]
-                            )
 
-                return processed_phrases
-
-            except Exception as e:
-                print(f"[Subtitles] Echec avec {model_name} : {e}")
-                continue
+            return processed_phrases
 
     except Exception as err:
         print(f"[Subtitles] Erreur globale alignement audio : {err}")
