@@ -103,11 +103,15 @@
               <strong class="chip-val">{{ videos|length }} active(s) &bull; {{ archived_videos|length }} archive(s)</strong>
             </div>
             <div class="meta-chip">
+              <span class="chip-label">Rythme</span>
+              <strong class="chip-val" style="color: var(--brand-orange);">{{ posts_per_day }} publi/jour</strong>
+            </div>
+            <div class="meta-chip">
               <span class="chip-label">Statut du jour</span>
               {% if is_today_published %}
-              <strong class="chip-val" style="color: var(--status-emerald);">Publie aujourd'hui</strong>
+              <strong class="chip-val" style="color: var(--status-emerald);">Cycle termine</strong>
               {% else %}
-              <strong class="chip-val" style="color: var(--brand-orange);">Pret pour 11h30</strong>
+              <strong class="chip-val" style="color: var(--brand-orange);">Pret pour {{ current_slot_time }} ({{ current_slot }}/{{ posts_per_day }})</strong>
               {% endif %}
             </div>
             <div class="meta-chip">
@@ -499,6 +503,30 @@
             <input type="password" id="input-gemini-key" class="form-input" placeholder="Renseigner une nouvelle clef...">
           </div>
           <button class="btn btn-secondary btn-sm" onclick="saveCredentials()">Mettre a jour la clef</button>
+        </div>
+
+        <!-- Publication Frequency Card -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Frequence de publication</span>
+            </h3>
+            <span class="badge badge-emerald" id="badge-posts-per-day">{{ posts_per_day }} par jour</span>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">
+            Definissez le nombre de parutions automatiques par jour. La preparation de la 1ere video a lieu a 00h01 (diffusion a 11h30 avec la Story). Les parutions suivantes sont espacees de 2 heures (video seule Reel + TikTok).
+          </p>
+          <div class="form-group">
+            <label class="form-label">Rythme quotidien</label>
+            <select id="select-posts-per-day" class="form-input">
+              <option value="1" {% if posts_per_day == 1 %}selected{% endif %}>1 fois par jour (11h30 + Story) [Par defaut]</option>
+              <option value="2" {% if posts_per_day == 2 %}selected{% endif %}>2 fois par jour (11h30 + Story, puis 13h30)</option>
+              <option value="3" {% if posts_per_day == 3 %}selected{% endif %}>3 fois par jour (11h30 + Story, 13h30, 15h30)</option>
+              <option value="4" {% if posts_per_day == 4 %}selected{% endif %}>4 fois par jour (11h30 + Story, 13h30, 15h30, 17h30)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveFrequencySettings()">Enregistrer la frequence</button>
         </div>
 
         <!-- Social Media Profiles Card (Mode Test vs Mode Officiel) -->

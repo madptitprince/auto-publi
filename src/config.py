@@ -201,3 +201,34 @@ def save_social_settings(active_profile: str, profiles_dict: dict | None = None)
 
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def get_publication_frequency() -> int:
+    """Retrieve number of posts per day (1, 2, 3, or 4). Defaults to 1."""
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                val = int(data.get("posts_per_day", 1))
+                if val in (1, 2, 3, 4):
+                    return val
+        except Exception:
+            pass
+    return 1
+
+
+def save_publication_frequency(posts_per_day: int):
+    """Save number of posts per day (1, 2, 3, or 4)."""
+    if posts_per_day not in (1, 2, 3, 4):
+        posts_per_day = 1
+    data = {}
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+    data["posts_per_day"] = posts_per_day
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+

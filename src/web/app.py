@@ -31,12 +31,16 @@ from src.config import (
     save_opening_hours,
     get_social_settings,
     save_social_settings,
+    get_publication_frequency,
+    save_publication_frequency,
 )
 from src.scheduler import (
     run_daily_publication,
     load_history,
     start_scheduler,
     scheduler,
+    configure_scheduler_jobs,
+    PUBLICATION_SLOTS,
     list_pending_videos,
     list_archived_videos,
     archive_video_file,
@@ -273,29 +277,31 @@ async def dashboard(request: Request):
 
     has_gemini_key = bool(os.getenv("GEMINI_API_KEY"))
 
-    # Dynamic next run calculation based on APScheduler and publication status
+    posts_per_day = get_publication_frequency()
+    current_slot = today_preview.get("slot", 1) if today_preview else 1
+    current_slot_time = today_preview.get("scheduled_time", "11:30") if today_preview else "11:30"
+    current_has_story = today_preview.get("has_story", current_slot == 1) if today_preview else True
+
+    # Calcul dynamique du prochain créneau de publication parmi les créneaux actifs
     next_run = "Demain à 11h30"
     try:
-        job = scheduler.get_job("daily_bchef_publication")
-        if job and job.next_run_time:
-            run_dt = job.next_run_time
-            today_date = datetime.datetime.now(run_dt.tzinfo).date() if run_dt.tzinfo else datetime.date.today()
-            if run_dt.date() == today_date and not is_today_published:
-                next_run = f"Aujourd'hui à {run_dt.strftime('%Hh%M')}"
+        upcoming_runs = []
+        for s_idx in range(1, posts_per_day + 1):
+            job = scheduler.get_job(f"bchef_pub_slot_{s_idx}")
+            if job and job.next_run_time:
+                upcoming_runs.append((job.next_run_time, s_idx))
+        if upcoming_runs:
+            upcoming_runs.sort(key=lambda x: x[0])
+            next_dt, s_num = upcoming_runs[0]
+            today_date = datetime.datetime.now(next_dt.tzinfo).date() if next_dt.tzinfo else datetime.date.today()
+            slot_info = next((s for s in PUBLICATION_SLOTS if s["slot"] == s_num), None)
+            time_display = slot_info["publish_time_str"] if slot_info else next_dt.strftime("%Hh%M")
+            if next_dt.date() == today_date and not is_today_published:
+                next_run = f"Aujourd'hui à {time_display} (créneau {s_num}/{posts_per_day})"
             else:
-                next_run = f"Demain à {run_dt.strftime('%Hh%M')}"
-        else:
-            now_dt = datetime.datetime.now()
-            if is_today_published or (now_dt.hour > 11 or (now_dt.hour == 11 and now_dt.minute >= 30)):
-                next_run = "Demain à 11h30"
-            else:
-                next_run = "Aujourd'hui à 11h30"
+                next_run = f"Demain à {time_display} (créneau {s_num}/{posts_per_day})"
     except Exception:
-        now_dt = datetime.datetime.now()
-        if is_today_published or (now_dt.hour > 11 or (now_dt.hour == 11 and now_dt.minute >= 30)):
-            next_run = "Demain à 11h30"
-        else:
-            next_run = "Aujourd'hui à 11h30"
+        next_run = "Aujourd'hui à 11h30"
 
     social_cfg = get_social_settings()
     active_profile = social_cfg["active_profile"]
@@ -320,6 +326,11 @@ async def dashboard(request: Request):
             "schedule_days": schedule_days,
             "has_gemini_key": has_gemini_key,
             "next_run": next_run,
+            "posts_per_day": posts_per_day,
+            "current_slot": current_slot,
+            "current_slot_time": current_slot_time,
+            "current_has_story": current_has_story,
+            "publication_slots": PUBLICATION_SLOTS,
             "active_profile": active_profile,
             "profiles": profiles,
             "instagram_user": profiles.get(active_profile, {}).get("instagram_username", ""),
@@ -492,6 +503,25 @@ async def trigger_publish(
                 publication_status["status"] = "success"
                 publication_status["percent"] = 100
                 publication_status["step"] = "Publication terminee avec succes !"
+
+                # Si d'autres creneaux sont prevus aujourd'hui, preparer le suivant
+                done_slot = res.get("slot", 1)
+                total_freq = get_publication_frequency()
+                if not is_sim and done_slot < total_freq:
+                    next_s = done_slot + 1
+                    next_info = next((s for s in PUBLICATION_SLOTS if s["slot"] == next_s), None)
+                    if next_info:
+                        print(f"Preparation automatique du creneau suivant {next_s}/{total_freq} (prevu a {next_info['publish_time_str']})...", flush=True)
+                        threading.Thread(
+                            target=generate_daily_preview,
+                            kwargs={
+                                "slot_index": next_s,
+                                "publish_time_str": next_info["publish_time_str"],
+                                "generate_story": False,
+                                "force": True,
+                            },
+                            daemon=True,
+                        ).start()
             elif res.get("status") == "already_published":
                 publication_status["status"] = "already_published"
                 publication_status["percent"] = 100
@@ -650,6 +680,22 @@ async def update_social_profile(
     save_social_settings(active_profile=active_profile, profiles_dict=profiles_dict)
     label = "Mode Officiel (BCHEF Bourges)" if active_profile == "official" else "Mode Test (Compte bac a sable)"
     return {"status": "success", "message": f"Profil actif basculé sur : {label}", "active_profile": active_profile}
+
+
+@app.post("/api/settings/frequency")
+async def update_publication_frequency(posts_per_day: int = Form(...)):
+    if posts_per_day not in (1, 2, 3, 4):
+        raise HTTPException(status_code=400, detail="La frequence doit etre comprise entre 1 et 4 publications par jour.")
+    save_publication_frequency(posts_per_day)
+    try:
+        configure_scheduler_jobs()
+    except Exception as e:
+        print(f"Erreur re-configuration scheduler: {e}", flush=True)
+    return {
+        "status": "success",
+        "posts_per_day": posts_per_day,
+        "message": f"Frequence mise a jour avec succes : {posts_per_day} publication(s) par jour.",
+    }
 
 
 @app.get("/api/status")

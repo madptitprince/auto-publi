@@ -20,5 +20,6 @@
       "instagram_password": "Dreadneal1989",
       "tiktok_cookies_file": "tiktok_cookies_official.json"
     }
-  }
+  },
+  "posts_per_day": 1
 }

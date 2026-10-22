@@ -496,3 +496,36 @@ document.addEventListener("DOMContentLoaded", () => {
     .catch(() => {});
 });
 
+
+async function saveFrequencySettings() {
+  const sel = document.getElementById("select-posts-per-day");
+  if (!sel) return;
+  const postsPerDay = sel.value;
+
+  const formData = new FormData();
+  formData.append("posts_per_day", postsPerDay);
+
+  showToast("Enregistrement du rythme de publication...");
+  try {
+    const res = await fetch("/api/settings/frequency", {
+      method: "POST",
+      body: formData,
+    });
+    if (res.status === 401) {
+      showToast("Session expiree. Reconnexion requise...", true);
+      setTimeout(() => location.href = "/login", 1200);
+      return;
+    }
+    const data = await res.json();
+    if (data.status === "success") {
+      showToast(data.message || "Frequence mise a jour avec succes.");
+      const badge = document.getElementById("badge-posts-per-day");
+      if (badge) badge.textContent = `${postsPerDay} par jour`;
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.detail || "Erreur lors de l'enregistrement.", true);
+    }
+  } catch (err) {
+    showToast("Erreur reseau lors de l'enregistrement.", true);
+  }
+}
