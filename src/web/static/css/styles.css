@@ -1176,6 +1176,131 @@ body {
   gap: 12px;
 }
 
+/* Settings Tab Controls & Layout */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.settings-card-full {
+  grid-column: 1 / -1;
+}
+
+.settings-fields-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.card-footer-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.form-group-last {
+  margin-bottom: 0;
+}
+
+/* Profile Selector & Subgrid */
+.profile-picker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.profile-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.profile-option:hover {
+  border-color: var(--border-subtle-hover);
+}
+
+.profile-option input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand-orange);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.profile-option input[value="test"] {
+  accent-color: #3b82f6;
+}
+
+.profile-option.active-test,
+.profile-option:has(input[value="test"]:checked) {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.profile-option.active-official,
+.profile-option:has(input[value="official"]:checked) {
+  border-color: var(--brand-orange);
+  background: rgba(227, 82, 5, 0.08);
+}
+
+.profile-option-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-option-text strong {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.profile-option-text span {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.profile-subgrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.profile-box {
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+}
+
+.profile-box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.profile-box-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.profile-test-color {
+  color: #60a5fa;
+}
+
+.profile-official-color {
+  color: var(--brand-orange);
+}
+
 /* ============================================================ */
 /* RESPONSIVE BREAKPOINTS (Mobile & Tablet)                     */
 /* ============================================================ */
@@ -1185,6 +1310,15 @@ body {
   .grid-2col {
     grid-template-columns: 1fr;
     gap: 20px;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .settings-card-full {
+    grid-column: 1;
   }
 
   .preview-columns {
@@ -1379,6 +1513,45 @@ body {
   /* Mobile floating action bar */
   .mobile-action-bar {
     display: flex;
+  }
+
+  /* Settings Tab Mobile Overrides */
+  .settings-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .settings-card-full {
+    grid-column: 1;
+  }
+
+  .settings-fields-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .profile-picker {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .profile-subgrid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .card-footer-action {
+    justify-content: stretch;
+  }
+
+  .card-footer-action .btn {
+    width: 100%;
+    min-height: 42px;
+    justify-content: center;
+  }
+
+  .form-input {
+    font-size: 16px;
   }
 
   .toast-notice {

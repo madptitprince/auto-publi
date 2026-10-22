@@ -494,6 +494,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     })
     .catch(() => {});
+
+  document.querySelectorAll('input[name="radio-profile"]').forEach(radio => {
+    radio.addEventListener("change", () => {
+      document.querySelectorAll(".profile-option").forEach(opt => {
+        opt.classList.remove("active-test", "active-official");
+      });
+      const parent = radio.closest(".profile-option");
+      if (parent) {
+        if (radio.value === "test") parent.classList.add("active-test");
+        if (radio.value === "official") parent.classList.add("active-official");
+      }
+    });
+  });
 });
 
 
