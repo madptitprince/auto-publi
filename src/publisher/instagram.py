@@ -235,14 +235,25 @@ class InstagramPublisher:
             # 1. Location tagging
             bchef_loc = self.get_bchef_location(cl)
 
-            # 2. Upload Reel with location
-            print(f"Publication du Reel avec le lieu : {bchef_loc.name if bchef_loc else 'Non trouvé'}")
-            media = cl.clip_upload(
-                str(video_path),
-                caption=caption,
-                thumbnail=thumbnail,
-                location=bchef_loc,
-            )
+            # 2. Upload Reel with location and Facebook crossposting
+            print(f"Publication du Reel avec le lieu : {bchef_loc.name if bchef_loc else 'Non trouvé'} (Partage Facebook activé)")
+            try:
+                media = cl.clip_upload(
+                    str(video_path),
+                    caption=caption,
+                    thumbnail=thumbnail,
+                    location=bchef_loc,
+                    share_to_facebook=True,
+                )
+            except Exception as fb_err:
+                print(f"Avertissement lors du cross-posting Facebook ({fb_err}), repli sur publication Instagram seule...", flush=True)
+                media = cl.clip_upload(
+                    str(video_path),
+                    caption=caption,
+                    thumbnail=thumbnail,
+                    location=bchef_loc,
+                    share_to_facebook=False,
+                )
 
             return {
                 "platform": "instagram",
