@@ -91,6 +91,9 @@ COLOR_GRAY = (80, 80, 80)
 # Gemini API Key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
+# Facebook Page ID for cross-posting (BCHEF Bourges: 108137498536376)
+FACEBOOK_PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "108137498536376")
+
 
 def get_opening_hours() -> dict[str, str]:
     """Retrieve opening hours from settings.json or defaults."""

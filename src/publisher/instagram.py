@@ -120,6 +120,33 @@ class InstagramPublisher:
             print(f"Erreur recherche lieu BCHEF Instagram : {e}")
         return None
 
+    def get_facebook_page_destination(self, cl) -> tuple[str | None, str | None]:
+        """
+        Retrieves the linked Facebook Page ID and name for cross-posting.
+        Returns (page_id, page_name) if a Page is linked, else (None, None).
+        Strictly guarantees that personal FB profiles are NEVER used for cross-posting.
+        """
+        if self.target_profile != "official":
+            return None, None
+
+        # 1. Try to extract directly from current Instagram profile metadata
+        try:
+            raw = cl.private_request(f"users/{cl.user_id}/info/")
+            user = raw.get("user", {})
+            page_id = user.get("page_id") or user.get("linked_fb_info", {}).get("linked_fb_page", {}).get("id")
+            page_name = user.get("page_name") or user.get("linked_fb_info", {}).get("linked_fb_page", {}).get("name")
+            if page_id:
+                return str(page_id), str(page_name or "BCHEF (Bourges)")
+        except Exception as e:
+            print(f"Avertissement detection dynamique page Facebook : {e}", flush=True)
+
+        # 2. Fallback to configured FACEBOOK_PAGE_ID
+        from src.config import FACEBOOK_PAGE_ID
+        if FACEBOOK_PAGE_ID:
+            return str(FACEBOOK_PAGE_ID).strip(), "BCHEF (Bourges)"
+
+        return None, None
+
     def get_suggested_music_track(self, cl) -> Optional[object]:
         """Fetches the #1 trending/suggested music track by Instagram, with search fallback."""
         try:
@@ -235,33 +262,44 @@ class InstagramPublisher:
             # 1. Location tagging
             bchef_loc = self.get_bchef_location(cl)
 
-            # 2. Check Facebook cross-posting destination safety
+            # 2. Check Facebook Page cross-posting destination
             share_fb = False
-            try:
-                fb_dest = cl.clip_share_to_fb_destination()
-                dest_type = (fb_dest.get("destination_type") or "").upper()
-                if dest_type == "PAGE":
-                    share_fb = True
-                    print(f"Destination Facebook validee : Page {fb_dest.get('destination_id')}")
-                else:
-                    print(
-                        f"Partage Facebook ignore par securite : destination configuree en profil personnel ({dest_type}). "
-                        "Pour publier sur la page, selectionnez la Page BCHEF Bourges dans l'Espace Comptes Meta.",
-                        flush=True,
-                    )
-            except Exception as e_dest:
-                print(f"Impossible de verifier la destination Facebook ({e_dest}), partage Facebook desactive par securite.", flush=True)
+            fb_page_id, fb_page_name = self.get_facebook_page_destination(cl)
+            if fb_page_id:
+                share_fb = True
+                print(f"Destination Facebook validee : Page '{fb_page_name}' (ID: {fb_page_id})", flush=True)
+            else:
+                print(
+                    "Partage Facebook desactive : aucune Page Facebook liee detectee. "
+                    "Le partage sur profil personnel est strictement bloque par securite.",
+                    flush=True,
+                )
 
             # 3. Upload Reel with location and Facebook crossposting
-            print(f"Publication du Reel avec le lieu : {bchef_loc.name if bchef_loc else 'Non trouve'} (Partage Facebook : {share_fb})")
+            print(
+                f"Publication du Reel avec le lieu : {bchef_loc.name if bchef_loc else 'Non trouve'} "
+                f"(Partage Facebook Page : {share_fb}{f' -> {fb_page_name}' if share_fb else ''})",
+                flush=True,
+            )
             try:
-                media = cl.clip_upload(
-                    str(video_path),
-                    caption=caption,
-                    thumbnail=thumbnail,
-                    location=bchef_loc,
-                    share_to_facebook=share_fb,
-                )
+                if share_fb and fb_page_id:
+                    media = cl.clip_upload(
+                        str(video_path),
+                        caption=caption,
+                        thumbnail=thumbnail,
+                        location=bchef_loc,
+                        share_to_facebook=True,
+                        fb_destination_id=fb_page_id,
+                        fb_destination_type="PAGE",
+                    )
+                else:
+                    media = cl.clip_upload(
+                        str(video_path),
+                        caption=caption,
+                        thumbnail=thumbnail,
+                        location=bchef_loc,
+                        share_to_facebook=False,
+                    )
             except Exception as fb_err:
                 print(f"Avertissement lors de l'envoi du Reel ({fb_err}), repli sans cross-posting Facebook...", flush=True)
                 media = cl.clip_upload(
@@ -278,6 +316,8 @@ class InstagramPublisher:
                 "status": "published",
                 "media_id": str(media.pk),
                 "location": bchef_loc.name if bchef_loc else "Bourges",
+                "facebook_shared": share_fb,
+                "facebook_destination": f"{fb_page_name} ({fb_page_id})" if share_fb and fb_page_id else None,
             }
         except Exception as e:
             return {
