@@ -235,18 +235,35 @@ class InstagramPublisher:
             # 1. Location tagging
             bchef_loc = self.get_bchef_location(cl)
 
-            # 2. Upload Reel with location and Facebook crossposting
-            print(f"Publication du Reel avec le lieu : {bchef_loc.name if bchef_loc else 'Non trouvé'} (Partage Facebook activé)")
+            # 2. Check Facebook cross-posting destination safety
+            share_fb = False
+            try:
+                fb_dest = cl.clip_share_to_fb_destination()
+                dest_type = (fb_dest.get("destination_type") or "").upper()
+                if dest_type == "PAGE":
+                    share_fb = True
+                    print(f"Destination Facebook validee : Page {fb_dest.get('destination_id')}")
+                else:
+                    print(
+                        f"Partage Facebook ignore par securite : destination configuree en profil personnel ({dest_type}). "
+                        "Pour publier sur la page, selectionnez la Page BCHEF Bourges dans l'Espace Comptes Meta.",
+                        flush=True,
+                    )
+            except Exception as e_dest:
+                print(f"Impossible de verifier la destination Facebook ({e_dest}), partage Facebook desactive par securite.", flush=True)
+
+            # 3. Upload Reel with location and Facebook crossposting
+            print(f"Publication du Reel avec le lieu : {bchef_loc.name if bchef_loc else 'Non trouve'} (Partage Facebook : {share_fb})")
             try:
                 media = cl.clip_upload(
                     str(video_path),
                     caption=caption,
                     thumbnail=thumbnail,
                     location=bchef_loc,
-                    share_to_facebook=True,
+                    share_to_facebook=share_fb,
                 )
             except Exception as fb_err:
-                print(f"Avertissement lors du cross-posting Facebook ({fb_err}), repli sur publication Instagram seule...", flush=True)
+                print(f"Avertissement lors de l'envoi du Reel ({fb_err}), repli sans cross-posting Facebook...", flush=True)
                 media = cl.clip_upload(
                     str(video_path),
                     caption=caption,
