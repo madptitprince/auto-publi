@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import shutil
 import datetime
 import subprocess
@@ -303,11 +304,32 @@ async def dashboard(request: Request):
     except Exception:
         next_run = "Aujourd'hui à 11h30"
 
+def get_tiktok_session_status(cookies_file_name: str) -> dict:
+    c_path = DATA_DIR / cookies_file_name
+    if not c_path.exists():
+        return {"exists": False, "status": "missing", "badge_class": "badge-rose", "label": "Session absente"}
+    try:
+        with open(c_path, "r", encoding="utf-8") as f:
+            cookies = json.load(f)
+        session_c = next((c for c in cookies if c.get("name") in ("sessionid", "sessionid_ss")), None)
+        if not session_c:
+            return {"exists": True, "status": "invalid", "badge_class": "badge-amber", "label": "Session invalide"}
+        exp = session_c.get("expires")
+        if exp and exp > 0 and time.time() > exp:
+            exp_date = datetime.datetime.fromtimestamp(exp).strftime("%d/%m")
+            return {"exists": True, "status": "expired", "badge_class": "badge-rose", "label": f"Expiree ({exp_date})"}
+        return {"exists": True, "status": "active", "badge_class": "badge-emerald", "label": "Session active"}
+    except Exception:
+        return {"exists": True, "status": "error", "badge_class": "badge-amber", "label": "Erreur cookies"}
+
+
     social_cfg = get_social_settings()
     active_profile = social_cfg["active_profile"]
     profiles = social_cfg["profiles"]
     has_tiktok_test = (DATA_DIR / profiles["test"].get("tiktok_cookies_file", "tiktok_cookies.json")).exists()
     has_tiktok_official = (DATA_DIR / profiles["official"].get("tiktok_cookies_file", "tiktok_cookies_official.json")).exists()
+    tiktok_test_status = get_tiktok_session_status(profiles["test"].get("tiktok_cookies_file", "tiktok_cookies.json"))
+    tiktok_official_status = get_tiktok_session_status(profiles["official"].get("tiktok_cookies_file", "tiktok_cookies_official.json"))
 
     return templates.TemplateResponse(
         request=request,
@@ -337,6 +359,8 @@ async def dashboard(request: Request):
             "has_tiktok": has_tiktok_official if active_profile == "official" else has_tiktok_test,
             "has_tiktok_test": has_tiktok_test,
             "has_tiktok_official": has_tiktok_official,
+            "tiktok_test_status": tiktok_test_status,
+            "tiktok_official_status": tiktok_official_status,
             "auth_user": getattr(request.state, "user", "admin"),
             "is_today_published": is_today_published,
         },

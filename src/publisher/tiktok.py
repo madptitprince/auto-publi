@@ -1,6 +1,7 @@
 import os
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -170,6 +171,18 @@ class TikTokPublisher:
         try:
             with open(cookies_file, "r", encoding="utf-8") as f:
                 cookies = json.load(f)
+
+            # Verification prealable de validite de la session TikTok
+            session_c = next((c for c in cookies if c.get("name") in ("sessionid", "sessionid_ss")), None)
+            if session_c and session_c.get("expires") and session_c["expires"] > 0:
+                if time.time() > session_c["expires"]:
+                    exp_date = datetime.fromtimestamp(session_c["expires"]).strftime("%d/%m/%Y a %H:%M")
+                    return {
+                        "platform": "tiktok",
+                        "type": "video",
+                        "status": "error",
+                        "error": f"Session TikTok expiree depuis le {exp_date}. Renouvelez les cookies dans {cookies_file.name}.",
+                    }
 
             resolved_video_path = str(video_path.resolve())
 

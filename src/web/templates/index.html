@@ -578,7 +578,9 @@
               <div class="form-group form-group-last">
                 <label class="form-label">TikTok</label>
                 <div>
-                  {% if has_tiktok_test %}
+                  {% if tiktok_test_status %}
+                  <span class="badge {{ tiktok_test_status.badge_class }}">{{ tiktok_test_status.label }}</span>
+                  {% elif has_tiktok_test %}
                   <span class="badge badge-emerald">Session active</span>
                   {% else %}
                   <span class="badge badge-rose">Session absente</span>
@@ -604,7 +606,9 @@
               <div class="form-group form-group-last">
                 <label class="form-label">TikTok</label>
                 <div>
-                  {% if has_tiktok_official %}
+                  {% if tiktok_official_status %}
+                  <span class="badge {{ tiktok_official_status.badge_class }}">{{ tiktok_official_status.label }}</span>
+                  {% elif has_tiktok_official %}
                   <span class="badge badge-emerald">Session active</span>
                   {% else %}
                   <span class="badge badge-amber">Session manquante</span>
