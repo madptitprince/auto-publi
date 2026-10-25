@@ -216,6 +216,25 @@ def get_video_info(video_path: Path) -> dict:
     }
 
 
+def get_tiktok_session_status(cookies_file_name: str) -> dict:
+    c_path = DATA_DIR / cookies_file_name
+    if not c_path.exists():
+        return {"exists": False, "status": "missing", "badge_class": "badge-rose", "label": "Session absente"}
+    try:
+        with open(c_path, "r", encoding="utf-8") as f:
+            cookies = json.load(f)
+        session_c = next((c for c in cookies if c.get("name") in ("sessionid", "sessionid_ss")), None)
+        if not session_c:
+            return {"exists": True, "status": "invalid", "badge_class": "badge-amber", "label": "Session invalide"}
+        exp = session_c.get("expires")
+        if exp and exp > 0 and time.time() > exp:
+            exp_date = datetime.datetime.fromtimestamp(exp).strftime("%d/%m")
+            return {"exists": True, "status": "expired", "badge_class": "badge-rose", "label": f"Expiree ({exp_date})"}
+        return {"exists": True, "status": "active", "badge_class": "badge-emerald", "label": "Session active"}
+    except Exception:
+        return {"exists": True, "status": "error", "badge_class": "badge-amber", "label": "Erreur cookies"}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     day_fr, hours = get_today_hours()
@@ -303,25 +322,6 @@ async def dashboard(request: Request):
                 next_run = f"Demain à {time_display} (créneau {s_num}/{posts_per_day})"
     except Exception:
         next_run = "Aujourd'hui à 11h30"
-
-def get_tiktok_session_status(cookies_file_name: str) -> dict:
-    c_path = DATA_DIR / cookies_file_name
-    if not c_path.exists():
-        return {"exists": False, "status": "missing", "badge_class": "badge-rose", "label": "Session absente"}
-    try:
-        with open(c_path, "r", encoding="utf-8") as f:
-            cookies = json.load(f)
-        session_c = next((c for c in cookies if c.get("name") in ("sessionid", "sessionid_ss")), None)
-        if not session_c:
-            return {"exists": True, "status": "invalid", "badge_class": "badge-amber", "label": "Session invalide"}
-        exp = session_c.get("expires")
-        if exp and exp > 0 and time.time() > exp:
-            exp_date = datetime.datetime.fromtimestamp(exp).strftime("%d/%m")
-            return {"exists": True, "status": "expired", "badge_class": "badge-rose", "label": f"Expiree ({exp_date})"}
-        return {"exists": True, "status": "active", "badge_class": "badge-emerald", "label": "Session active"}
-    except Exception:
-        return {"exists": True, "status": "error", "badge_class": "badge-amber", "label": "Erreur cookies"}
-
 
     social_cfg = get_social_settings()
     active_profile = social_cfg["active_profile"]
