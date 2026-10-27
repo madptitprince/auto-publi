@@ -405,15 +405,24 @@ def cut_and_normalize_segment(
     output_segment_path: Path,
 ) -> None:
     """
-    Cuts a segment from source video and normalizes video dimensions to 1080x1920 @ 30fps.
+    Cuts a segment from source video, applies audio micro-fades to eliminate cut clicks/pops,
+    and normalizes video dimensions to 1080x1920 @ 30fps with frame-accurate seeking.
     """
     vf = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30"
+
+    # Acoustic micro-fades (15ms) on cut boundaries to ensure seamless transition without pops
+    fade_d = min(0.015, max(0.005, duration_sec / 20.0))
+    fade_out_st = max(0.0, duration_sec - fade_d)
+    af = f"afade=t=in:st=0:d={fade_d},afade=t=out:st={fade_out_st}:d={fade_d}"
+
     cmd = [
         "ffmpeg", "-y",
+        "-accurate_seek",
         "-ss", str(start_sec),
         "-i", str(source_file),
         "-t", str(duration_sec),
         "-vf", vf,
+        "-af", af,
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-crf", "21",
@@ -463,7 +472,7 @@ def render_montage(
                 f_idx = 0
             src = source_video_paths[f_idx]
             st = float(seg.get("start", 0.0))
-            dur = max(1.0, float(seg.get("end", st + 5.0)) - st)
+            dur = max(0.5, float(seg.get("end", st + 5.0)) - st)
 
             seg_out = scratch_dir / f"seg_{i:02d}.mp4"
             print(f"Découpe segment {i+1}/{len(segments)} : {src.name} [{st}s -> +{dur}s]")

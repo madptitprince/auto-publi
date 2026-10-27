@@ -79,7 +79,8 @@ def extract_audio_track(video_path: Path, output_audio_path: Path) -> Path:
 def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Path, rush_idx: int) -> dict:
     """
     Performs fast multimodal visual + auditory analysis on a single rush.
-    Returns visual description, spoken dialogue, tone, and character actions.
+    Extracts visual description, spoken dialogue, narrative role, and exact
+    speech/silence boundaries to eliminate dead air at rush start and end.
     """
     dur = get_video_duration(video_path)
     preview_file = scratch_dir / f"prev_rush_{rush_idx}.mp4"
@@ -94,16 +95,32 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
             f_ref = client.files.get(name=f_ref.name)
 
         prompt = (
-            "Analyse cette sequence video pour le restaurant BCHEF Bourges (13 place Gordaine) :\n"
+            "Tu es un chef monteur expert en Reels et TikTok viraux pour BCHEF Bourges (13 place Gordaine).\n"
+            "Analyse ultra-precisement les paroles, silences et temps morts de ce rush video brut :\n"
             "1. Visuel : Qui sont les personnes, que font-elles precisement (actions, regards, mimiques, objets/plats manipules) ?\n"
-            "2. Paroles : Y a-t-il des dialogues ou est-ce muet / bruit ambiant ? Transcris tout mot prononce.\n"
-            "3. Rôle narratif : Est-ce une mise en place de vanne (feinte), une chute comique, une commande en cuisine, ou un moment produit/service burger gourmand ?\n\n"
-            "Reponds en JSON strict :\n"
+            "2. Paroles : Y a-t-il des dialogues ou est-ce muet / bruit ambiant ? Transcris fidelement les propos prononces.\n"
+            "3. Rôle narratif : Est-ce une mise en place de vanne (feinte), une chute comique, une commande en cuisine, ou un moment produit/service burger gourmand ?\n"
+            "4. Horodatages chirurgicaux de parole & silences :\n"
+            "   - debut_parole : seconde exacte ou la personne commence a parler (ou debut de l'action narrative clef).\n"
+            "   - fin_parole : seconde exacte ou la personne termine sa derniere replique / punchline / mot prononce.\n"
+            "   - pause_debut_secondes : secondes de flottement ou d'attente au tout debut avant que la parole/action commence.\n"
+            "   - pause_fin_secondes : secondes de silence, hesitation, regard camera fixe ou attente a la fin apres la derniere parole.\n"
+            "   - cut_in_recommande : horodatage ideal de debut pour couper l'attente initiale et demarrer direct sur l'action.\n"
+            "   - cut_out_recommande : horodatage ideal de fin pour couper NET des la fin de la parole sans aucun temps mort.\n"
+            "   - action_fin : description de ce qui se passe a la fin du rush (ex: silence, sourit, regarde la camera, attend, coupe le tel).\n\n"
+            "Reponds STRICTEMENT en JSON valide :\n"
             "{\n"
             '  "visuel": "description detaillee des actions et expressions",\n'
             '  "dialogues": "mots prononces mot a mot ou AUCUN",\n'
-            '  "role": "feinte / chute / service / cuisine",\n'
-            '  "ton": "humour / culinaire / rush"\n'
+            '  "role": "feinte / chute / service / cuisine / echange",\n'
+            '  "ton": "humour / culinaire / rush",\n'
+            '  "debut_parole": 0.0,\n'
+            '  "fin_parole": 15.2,\n'
+            '  "pause_debut_secondes": 0.5,\n'
+            '  "pause_fin_secondes": 2.1,\n'
+            '  "cut_in_recommande": 0.4,\n'
+            '  "cut_out_recommande": 15.3,\n'
+            '  "action_fin": "regarde fixement la camera en silence"\n'
             "}"
         )
 
@@ -119,6 +136,14 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
                 data = clean_json_text(res.text)
                 data["duration"] = dur
                 data["name"] = video_path.name
+
+                # Parse timing boundaries
+                data["debut_parole"] = round(float(data.get("debut_parole", 0.0)), 2)
+                data["fin_parole"] = round(float(data.get("fin_parole", dur)), 2)
+                data["cut_in_recommande"] = round(max(0.0, float(data.get("cut_in_recommande", 0.0))), 2)
+                data["cut_out_recommande"] = round(min(dur, max(data["cut_in_recommande"] + 0.8, float(data.get("cut_out_recommande", dur)))), 2)
+                data["pause_fin_secondes"] = round(max(0.0, float(data.get("pause_fin_secondes", dur - data["fin_parole"]))), 2)
+                data["action_fin"] = str(data.get("action_fin", "fin du clip"))
                 return data
             except Exception as e:
                 print(f"[AI Director] Echec modele {model_name} sur rush {video_path.name}: {e}")
@@ -127,7 +152,7 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
     except Exception as e:
         print(f"[AI Director] Erreur analyse rush {video_path.name}: {e}")
 
-    # Fallback to audio transcription if multimodal fails
+    # Fallback to basic audio transcription if multimodal fails
     audio_path = scratch_dir / f"audio_{rush_idx}.mp3"
     extract_audio_track(video_path, audio_path)
     return {
@@ -137,6 +162,12 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
         "dialogues": "Paroles non analysees",
         "role": "sequence",
         "ton": "humour",
+        "debut_parole": 0.0,
+        "fin_parole": dur,
+        "cut_in_recommande": 0.0,
+        "cut_out_recommande": dur,
+        "pause_fin_secondes": 0.0,
+        "action_fin": "fin du rush",
     }
 
 
@@ -151,43 +182,59 @@ def synthesize_master_montage_plan(
     """
     Directorial synthesis:
     Understands the narrative arc across all rushs, sequences the clips logically (setup -> punchline),
-    chooses the appropriate music and places sound effects (SFX) at key moments.
+    strictly cuts unneeded pauses at clip ends, ensures fluid sequencing, and adapts length up to 40s.
     """
     rush_summary = ""
     for i, a in enumerate(rush_analyses):
         rush_summary += (
-            f"\n--- RUSH {i} (Fichier: {a.get('name')}, Duree: {a.get('duration')}s) ---\n"
+            f"\n--- RUSH {i} (Fichier: {a.get('name')}, Duree totale: {a.get('duration')}s) ---\n"
             f"Actions visuelles : {a.get('visuel')}\n"
             f"Paroles : {a.get('dialogues')}\n"
             f"Rôle : {a.get('role')} | Ton : {a.get('ton')}\n"
+            f"Parole detectee : de {a.get('debut_parole', 0.0)}s a {a.get('fin_parole', a.get('duration'))}s\n"
+            f"Temps mort / Pause fin de rush : {a.get('pause_fin_secondes', 0.0)}s ({a.get('action_fin', 'pause')})\n"
+            f"Cuts recommandes : cut_in={a.get('cut_in_recommande', 0.0)}s, cut_out={a.get('cut_out_recommande', a.get('duration'))}s (COUPE OBLIGATOIREMENT AVANT LA PAUSE)\n"
         )
 
     prompt = f"""Tu es le Chef Monteur et Directeur Artistique expert en Reels et TikTok viraux pour BCHEF Bourges (13 place Gordaine).
-Voici l'analyse visuelle et audio de chaque rush brut disponible ({len(rush_analyses)} video(s)) :
+Voici l'analyse visuelle et audio detaillee de chaque rush brut disponible ({len(rush_analyses)} video(s)) :
 {rush_summary}
 
-Duree cible du montage final : {target_duration} secondes (entre 15s et 30s).
+Duree indicative cible : {target_duration} secondes (format reseaux sociaux flexible : entre 12s et 40s max).
 
-MISSION DE SCENARISATION ET MONTAGE :
-1. COMPREHENSION NARRATIVE REELLE :
+EXIGENCES CAPITALES DE RYTHME ET COUPE (PACING VIRAL TIKTOK / REELS) :
+1. SUPPRESSION IMPERATIVE DES PAUSES ET TEMPS MORTS EN FIN DE RUSH :
+   - A la fin des rushs, la personne a souvent fini sa replique et reste fittee, sourit timidement, attend ou regarde la camera avant de couper l'enregistrement.
+   - Tu DOIS couper NET immediatement des que la derniere replique ou la reaction comique est terminee (au niveau de 'cut_out_recommande' ou 'fin_parole' + 0.15s max).
+   - NE LAISSE JAMAIS TRAINER une pause, un silence ou un temps mort a la fin d'un segment !
+2. RACCORDEMENT FLUIDE ET DYNAMIQUE ENTRE LES RUSHS :
+   - Demarre chaque rush directement a 'cut_in_recommande' (ou debut_parole) pour supprimer l'hesitation initiale.
+   - L'enchainement entre la fin du rush precedent et le debut du rush suivant doit etre ultra-fluide, dynamique et sans trou sonore (jump-cut / match-cut viral).
+3. DUREE ADAPTABLE SANS TRONQUER LA FIN (MAX 40s) :
+   - La duree cible ({target_duration}s) est une orientation, pas une cage rigide :
+     * Si la scene ou le sketch est punchy et se conclut parfaitement en 15s ou 18s, ne le rallonge pas artificiellement avec du vide !
+     * Si le dialogue ou l'histoire a besoin de 30s a 38s pour que la punchline finale et la chute soient entieres sans etre coupees, utilise le temps necessaire jusqu'a 40s maximum.
+     * PLAFOND STRICT RESEAUX SOCIAUX : MAXIMUM ABSOLU DE 40.0 SECONDES. Ne depasse jamais 40.0s.
+     * NE COUPE JAMAIS LA PAROLE OU LA PUNCHLINE EN PLEIN MILIEU pour respecter un quota arbitraire.
+4. COMPREHENSION NARRATIVE REELLE :
    - Explique ce qu'il se passe reellement :
-     * Si c'est un sketch a plusieurs rushs (ex: l'equipier qui fait croire qu'une cliente attend d'urgence un chiller pour qu'Alexandre le prepare vite, puis s'en empare pour aller le boire en douce tout seul), comprends l'arnaque amicale !
-     * Ordonne chronologiquement les segments : la mise en place d'abord (la fausse urgence), puis la chute (la recuperation du chiller et la degustation en douce). N'hesite pas a inverser l'ordre des rushs si necessaire pour respecter la logique (Setup -> Punchline) !
-     * Si c'est une sequence sans parole (ex: serveuse qui apporte un burger gourmand et frites a table, cliente qui filme le plat), oriente le Hook et le ton sur la gourmandise du burger et le rituel foodie !
-2. HABILLAGE SONORE ET SOUND EFFECTS (SFX) :
+     * Si c'est un sketch a plusieurs rushs (ex: vanne entre equipiers, faux pretexte, arnaque amicale pour un chiller, planning ou conges refuses, Moses qui a des privileges), comprends l'intrigue complete !
+     * Ordonne chronologiquement les segments : la mise en place d'abord (Setup), puis la chute (Punchline).
+     * Si c'est une sequence foodie (burger, frites, service), cadence le rythme sur la gourmandise.
+5. HABILLAGE SONORE ET SOUND EFFECTS (SFX) :
    - Style musical ('comedy', 'lofi', 'tension', 'upbeat') :
-     * 'comedy' : pour les vannes entre collegues, sketchs, chiller en douce.
-     * 'lofi' : pour les moments gourmands, service en salle, ambiance cosy.
-     * 'tension' : pour le faux suspense ou secrets de cuisine.
-     * 'upbeat' : pour le gros rush et energie de service.
+     * 'comedy' : vannes, sketchs, complicite entre collegues.
+     * 'lofi' : moments gourmands, service en salle, ambiance cosy.
+     * 'tension' : faux drame, secrets de cuisine, privileges.
+     * 'upbeat' : rush du midi, dynamique de service.
    - Points d'effets sonores (SFX) a placer a des horodatages precis :
-     * 'whoosh' : transition dynamique lors d'un changement de rush.
-     * 'record_scratch' : rupture comique, arret net quand la verite eclate ou temps d'arret comique.
+     * 'whoosh' : transition dynamique lors d'un changement de plan.
+     * 'record_scratch' : rupture comique, arret net quand la verite eclate.
      * 'comedy_punch' : gros impact comique sur la chute humoristique.
      * 'ding' ou 'pop' : mise en valeur gourmande ou revelation.
-3. HOOK, DESCRIPTION ET HASHTAGS (STYLE OFFICIEL BOURGES, SANS AUCUN EMOJI) :
+6. HOOK, DESCRIPTION ET HASHTAGS (STYLE OFFICIEL BOURGES, SANS AUCUN EMOJI) :
    - Hook : MAJUSCULES, 6 a 9 mots max, percutant, stoppant le scroll (SANS AUCUN EMOJI).
-     Exemples reels qui fonctionnent : 'QUAND LE RUSH COMMENCE ET QUE TON COLLEGUE DISPARAIT', 'QUAND UNE CLIENTE DEPASSE TOTALEMENT LES BORNES', 'A PEINE ARRIVEE DEJA UN DOSSIER A TRAITER'.
+     Exemples reels : 'QUAND LE RUSH COMMENCE ET QUE TON COLLEGUE DISPARAIT', 'QUAND UNE CLIENTE DEPASSE TOTALEMENT LES BORNES', 'LE PETIT PREFERE DE LA CUISINE'.
    - Description : 1 seule phrase courte et naturelle incitant a l'interaction (SANS EMOJI et JAMAIS de blabla corporate type brochure).
      Exemples reels : 'Et vous, vous arrivez a tenir combien de temps sans faire de pause en plein coup de feu ?' ou 'Tague la personne de ton equipe a qui tu refiles toujours cette corvee en commentaire.'
    - Hashtags : 5 hashtags cibles parmi #bchef #bourges #restauration #viedequipe #humour #convivial #burger (SANS EMOJI).
@@ -202,12 +249,12 @@ Reponds STRICTEMENT en format JSON valide :
   "musique_style": "{music_mode if music_mode != 'auto' else 'comedy'}",
   "mix_voix": true,
   "segments": [
-    {{"file_index": 1, "start": 0.0, "end": 8.1, "label": "Mise en place de la feinte"}},
-    {{"file_index": 0, "start": 0.0, "end": 8.5, "label": "Chute : depart avec la boisson"}}
+    {{"file_index": 1, "start": 0.2, "end": 7.4, "label": "Mise en place sans temps mort"}},
+    {{"file_index": 0, "start": 0.1, "end": 8.2, "label": "Chute coupe des la fin de parole"}}
   ],
   "sfx": [
-    {{"time": 7.8, "type": "whoosh", "volume": 0.85}},
-    {{"time": 12.5, "type": "record_scratch", "volume": 0.85}}
+    {{"time": 7.2, "type": "whoosh", "volume": 0.85}},
+    {{"time": 12.0, "type": "comedy_punch", "volume": 0.85}}
   ]
 }}
 """
@@ -268,7 +315,14 @@ def analyze_and_plan_montage(
         )
 
         plan["api_key"] = active_key
-        return validate_and_sanitize_plan(plan, video_paths, target_duration, custom_hook, music_mode)
+        return validate_and_sanitize_plan(
+            plan=plan,
+            video_paths=video_paths,
+            target_duration=target_duration,
+            custom_hook=custom_hook,
+            music_mode=music_mode,
+            rush_analyses=rush_analyses,
+        )
 
     except Exception as err:
         print(f"Erreur globale analyse IA : {err}")
@@ -289,8 +343,15 @@ def validate_and_sanitize_plan(
     target_duration: int,
     custom_hook: str,
     music_mode: str,
+    rush_analyses: list[dict] | None = None,
 ) -> dict:
-    """Ensures plan has valid cuts, duration, sfx, and clean text without emojis."""
+    """
+    Ensures plan has valid cuts, cleans dead pauses at rush ends,
+    guarantees fluid transitions, respects social format cap (max 40s),
+    and removes any emojis from hook and description.
+    """
+    MAX_MONTAGE_DURATION = 40.0
+
     if custom_hook:
         plan["hook"] = custom_hook.upper()
 
@@ -303,7 +364,8 @@ def validate_and_sanitize_plan(
 
     segments = plan.get("segments", [])
     if not segments:
-        dur_clip = min(float(target_duration), 25.0) / max(1, len(video_paths))
+        dur_target = max(12.0, min(float(target_duration), MAX_MONTAGE_DURATION))
+        dur_clip = dur_target / max(1, len(video_paths))
         segments = [
             {"file_index": i, "start": 0.0, "end": round(dur_clip, 2), "label": f"Plan {i+1}"}
             for i in range(len(video_paths))
@@ -311,17 +373,47 @@ def validate_and_sanitize_plan(
 
     sanitized_segments = []
     total_dur = 0.0
+
     for seg in segments:
         f_idx = int(seg.get("file_index", 0))
         if f_idx < 0 or f_idx >= len(video_paths):
             f_idx = 0
         v_dur = get_video_duration(video_paths[f_idx])
         s = max(0.0, float(seg.get("start", 0.0)))
-        e = min(v_dur, max(s + 1.0, float(seg.get("end", s + 5.0))))
+        e = min(v_dur, max(s + 0.8, float(seg.get("end", s + 4.0))))
+
+        # Precise dead pause trimming using rush analysis if available
+        if rush_analyses and f_idx < len(rush_analyses):
+            ra = rush_analyses[f_idx]
+            rec_in = ra.get("cut_in_recommande")
+            rec_out = ra.get("cut_out_recommande")
+            fin_p = ra.get("fin_parole")
+            pause_fin = ra.get("pause_fin_secondes", 0.0)
+
+            # Prune initial dead hesitation if cut started at 0
+            if s < 0.2 and rec_in is not None and rec_in > 0.4:
+                s = rec_in
+
+            # If segment end trails into dead air or lingering pause, clamp it right after speech
+            if pause_fin >= 0.5 and fin_p and e > (fin_p + 0.25):
+                e = min(v_dur, max(s + 0.8, fin_p + 0.15))
+            elif rec_out and e > (rec_out + 0.3):
+                e = min(v_dur, max(s + 0.8, rec_out))
+
         dur = e - s
-        if total_dur + dur > 32.0 and sanitized_segments:
-            e = s + max(2.0, 30.0 - total_dur)
-            dur = e - s
+        if dur <= 0.3:
+            continue
+
+        # Check total montage length ceiling (max 40.0s)
+        if total_dur + dur > MAX_MONTAGE_DURATION:
+            remaining = MAX_MONTAGE_DURATION - total_dur
+            if remaining >= 1.5:
+                e = s + remaining
+                dur = e - s
+            else:
+                # Video has reached max capacity
+                break
+
         total_dur += dur
         sanitized_segments.append({
             "file_index": f_idx,
@@ -329,7 +421,8 @@ def validate_and_sanitize_plan(
             "end": round(e, 2),
             "label": seg.get("label", f"Plan {len(sanitized_segments)+1}"),
         })
-        if total_dur >= 28.0:
+
+        if total_dur >= MAX_MONTAGE_DURATION:
             break
 
     plan["segments"] = sanitized_segments
@@ -358,18 +451,22 @@ def create_fallback_plan(
     custom_hook: str = "",
     music_mode: str = "auto",
 ) -> dict:
-    """Safe offline emergency plan."""
+    """Safe offline emergency plan with flexible duration up to 40s."""
     hook = (custom_hook or "LES COULISSES DU RESTAURANT").upper()
-    dur_per_clip = max(4.0, target_duration / max(1, len(video_paths)))
+    dur_target = max(12.0, min(float(target_duration), 40.0))
+    dur_per_clip = max(3.0, dur_target / max(1, len(video_paths)))
     segments = []
+    total_len = 0.0
     for i, vp in enumerate(video_paths):
         v_dur = get_video_duration(vp)
+        clip_len = round(min(dur_per_clip, v_dur), 2)
         segments.append({
             "file_index": i,
             "start": 0.0,
-            "end": round(min(dur_per_clip, v_dur), 2),
+            "end": clip_len,
             "label": f"Rush {i+1}",
         })
+        total_len += clip_len
 
     return {
         "type_contenu": "coulisses",
@@ -380,8 +477,8 @@ def create_fallback_plan(
         "mix_voix": True,
         "musique_style": music_mode if music_mode != "auto" else "comedy",
         "segments": segments,
-        "sfx": [{"time": 5.0, "type": "whoosh", "volume": 0.85}],
+        "sfx": [{"time": 4.0, "type": "whoosh", "volume": 0.85}],
         "transcription": [],
-        "total_duration": round(dur_per_clip * len(video_paths), 2),
+        "total_duration": round(total_len, 2),
         "model_used": "fallback-local",
     }

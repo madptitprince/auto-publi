@@ -160,24 +160,45 @@
                         <form id="montage-form">
                             <!-- Duration -->
                             <div class="form-group">
-                                <label class="form-label">Durée finale cible</label>
+                                <div class="form-label-row">
+                                    <label class="form-label">Durée finale cible</label>
+                                    <span class="badge-hint">Max 40s réseaux sociaux</span>
+                                </div>
                                 <div class="duration-selector">
                                     <label class="radio-chip">
+                                        <input type="radio" name="target_duration" value="15">
+                                        <span class="chip-desktop">15s (Court / Punchy)</span>
+                                        <span class="chip-mobile">15s</span>
+                                    </label>
+                                    <label class="radio-chip">
                                         <input type="radio" name="target_duration" value="20">
-                                        <span class="chip-desktop">20 secondes</span>
+                                        <span class="chip-desktop">20s (Dynamique)</span>
                                         <span class="chip-mobile">20s</span>
                                     </label>
                                     <label class="radio-chip">
                                         <input type="radio" name="target_duration" value="25" checked>
-                                        <span class="chip-desktop">25 secondes (Idéal)</span>
-                                        <span class="chip-mobile">25s (Idéal)</span>
+                                        <span class="chip-desktop">25s (Idéal)</span>
+                                        <span class="chip-mobile">25s</span>
                                     </label>
                                     <label class="radio-chip">
                                         <input type="radio" name="target_duration" value="30">
-                                        <span class="chip-desktop">30 secondes</span>
+                                        <span class="chip-desktop">30s (Standard)</span>
                                         <span class="chip-mobile">30s</span>
                                     </label>
+                                    <label class="radio-chip">
+                                        <input type="radio" name="target_duration" value="35">
+                                        <span class="chip-desktop">35s (Complet)</span>
+                                        <span class="chip-mobile">35s</span>
+                                    </label>
+                                    <label class="radio-chip">
+                                        <input type="radio" name="target_duration" value="40">
+                                        <span class="chip-desktop">40s (Max Réseaux)</span>
+                                        <span class="chip-mobile">40s</span>
+                                    </label>
                                 </div>
+                                <p class="form-hint" style="margin-top: 6px; font-size: 11px; color: var(--text-muted, #94a3b8);">
+                                    L'IA cadre précisément la fin du rush et supprime les pauses inutiles sans couper la chute ni les dialogues importants.
+                                </p>
                             </div>
 
                             <!-- Music Choice -->
