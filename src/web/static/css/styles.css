@@ -1026,8 +1026,43 @@ body {
   background: var(--brand-orange);
 }
 
+.btn-icon-emerald {
+  background: var(--status-emerald);
+}
+
 .btn-icon-danger {
   background: var(--status-rose);
+}
+
+.btn-emerald {
+  background: var(--status-emerald);
+  color: #fff;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.btn-emerald:hover {
+  background: #059669;
+}
+
+.gallery-item-active {
+  border: 2px solid var(--status-emerald) !important;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
+}
+
+.story-active-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background-color: var(--status-emerald);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 4;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 /* Restaurant Hours Grid */

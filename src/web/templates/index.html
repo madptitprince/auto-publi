@@ -415,11 +415,11 @@
             <span>Ajouter des visuels pour les stories</span>
           </h3>
         </div>
-        <div class="dropzone-box" onclick="document.getElementById('input-story-tab').click()">
+        <div class="dropzone-box" id="dropzone-story-tab" onclick="document.getElementById('input-story-tab').click()">
           <svg class="icon icon-lg" style="color: var(--brand-orange);" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           <p>Deposez vos photos de story ici ou <span>parcourez vos fichiers</span></p>
-          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">Format attendu : PNG ou JPG vertical 9:16 (1080x1920)</p>
-          <input type="file" id="input-story-tab" style="display: none;" accept="image/png,image/jpeg" multiple onchange="handleFileUpload(this, 'story')">
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">Formats supportes : PNG, JPG, JPEG, WEBP, HEIC vertical 9:16 (1080x1920)</p>
+          <input type="file" id="input-story-tab" style="display: none;" accept="image/png,image/jpeg,image/webp,image/heic,image/*" multiple onchange="handleFileUpload(this, 'story')">
         </div>
       </div>
 
@@ -429,18 +429,25 @@
             <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span>Templates de Story disponibles ({{ stories|length }})</span>
           </h3>
-          <span style="font-size: 0.8rem; color: var(--text-muted);">Touchez une vignette pour apercevoir ou supprimer</span>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Touchez une vignette pour apercevoir ou selectionner</span>
         </div>
 
         <div class="stories-gallery">
           {% for s in stories %}
-          <div class="gallery-item" onclick="previewCustomStory('{{ s }}')">
+          <div class="gallery-item {% if s == today_story_source %}gallery-item-active{% endif %}" onclick="previewCustomStory('{{ s }}')">
             <img src="/media/uploads/stories/{{ s }}" alt="{{ s }}" loading="lazy">
+            {% if s == today_story_source %}
+            <span class="story-active-badge">Aujourd'hui</span>
+            {% endif %}
             <div class="gallery-overlay">
+              <button class="btn btn-emerald btn-sm" onclick="event.stopPropagation(); selectStoryToday('{{ s }}')">Choisir</button>
               <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); previewCustomStory('{{ s }}')">Apercu</button>
-              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteStory('{{ s }}')">Supprimer</button>
+              <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteStory('{{ s }}')">Suppr.</button>
             </div>
             <div class="gallery-actions-bar">
+              <button class="btn-icon btn-icon-emerald" title="Choisir pour aujourd'hui" onclick="event.stopPropagation(); selectStoryToday('{{ s }}')">
+                <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
               <button class="btn-icon btn-icon-primary" title="Apercu" onclick="event.stopPropagation(); previewCustomStory('{{ s }}')">
                 <svg class="icon-sm icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               </button>
@@ -725,11 +732,18 @@
   <div id="modal-story" class="modal-backdrop" onclick="closeModal('modal-story')">
     <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 440px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h4 style="font-size: 0.95rem; font-weight: 700;">Rendu Story Instagram</h4>
+        <h4 id="modal-story-title" style="font-size: 0.95rem; font-weight: 700;">Rendu Story Instagram</h4>
         <button class="btn btn-secondary btn-sm" onclick="closeModal('modal-story')">Fermer</button>
       </div>
-      <div style="width: 100%; aspect-ratio: 9/16; max-height: 540px; background: #000; border-radius: var(--radius-md); overflow: hidden;">
+      <div style="width: 100%; aspect-ratio: 9/16; max-height: 520px; background: #000; border-radius: var(--radius-md); overflow: hidden; margin-bottom: 12px;">
         <img id="modal-story-img" src="" style="width: 100%; height: 100%; object-fit: contain;" alt="Apercu Story">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn btn-secondary btn-sm" onclick="closeModal('modal-story')">Annuler</button>
+        <button class="btn btn-emerald btn-sm" onclick="applyModalStoryToday()">
+          <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Choisir pour aujourd'hui</span>
+        </button>
       </div>
     </div>
   </div>

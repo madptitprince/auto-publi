@@ -211,16 +211,76 @@ async function handleFileUpload(inputElement, type) {
       const data = await res.json();
       if (data.status !== "success") {
         showToast(`Erreur lors de l'upload de ${file.name}`, true);
+        inputElement.value = "";
         return;
       }
     } catch (e) {
       showToast("Erreur reseau durant le telechargement.", true);
+      inputElement.value = "";
       return;
     }
   }
 
+  inputElement.value = "";
   showToast("Fichiers ajoutes avec succes.");
   setTimeout(() => location.reload(), 1000);
+}
+
+let currentPreviewStoryName = "";
+
+async function previewCustomStory(filename) {
+  currentPreviewStoryName = filename;
+  const modalImg = document.getElementById("modal-story-img");
+  const modalTitle = document.getElementById("modal-story-title");
+  if (modalTitle) modalTitle.textContent = `Apercu Story - ${filename}`;
+  if (modalImg) modalImg.src = "";
+  openModal("modal-story");
+  showToast(`Generation du rendu pour ${filename}...`);
+  try {
+    const formData = new FormData();
+    formData.append("story_name", filename);
+    const res = await fetch("/api/story/preview-custom", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.status === "success" && data.preview_url) {
+      if (modalImg) modalImg.src = `${data.preview_url}?t=${Date.now()}`;
+    } else {
+      showToast(data.detail || "Erreur de rendu de l'apercu.", true);
+    }
+  } catch (err) {
+    showToast("Erreur reseau lors de l'apercu.", true);
+  }
+}
+
+async function selectStoryToday(filename) {
+  if (!filename) return;
+  showToast(`Application de ${filename} pour aujourd'hui...`);
+  try {
+    const formData = new FormData();
+    formData.append("source_image", filename);
+    const res = await fetch("/api/story/select-for-today", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.status === "success") {
+      showToast(data.message || "Story du jour mise a jour avec succes !");
+      closeModal("modal-story");
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.detail || "Erreur lors de la selection.", true);
+    }
+  } catch (err) {
+    showToast("Erreur reseau.", true);
+  }
+}
+
+function applyModalStoryToday() {
+  if (currentPreviewStoryName) {
+    selectStoryToday(currentPreviewStoryName);
+  }
 }
 
 // Drag and drop setup
@@ -253,6 +313,7 @@ function attachDropzone(zoneId, inputId, type) {
 }
 
 attachDropzone("dropzone-video-tab", "input-video-tab", "video");
+attachDropzone("dropzone-story-tab", "input-story-tab", "story");
 
 async function saveHours() {
   const form = document.getElementById("form-hours");

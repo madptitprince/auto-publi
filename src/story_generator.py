@@ -1,3 +1,4 @@
+import json
 import random
 import datetime
 import subprocess
@@ -13,6 +14,62 @@ from src.config import (
     get_opening_hours,
 )
 
+STORY_HISTORY_FILE = BASE_DIR / "data" / "story_history.json"
+
+
+def get_story_history() -> dict:
+    """Reads persistent story template history."""
+    if STORY_HISTORY_FILE.exists():
+        try:
+            with open(STORY_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"used": {}, "order": []}
+
+
+def record_used_story_template(template_name: str, date_str: str | None = None):
+    """Saves used template to ensure anti-repetition rotation."""
+    if not date_str:
+        date_str = datetime.date.today().strftime("%Y-%m-%d")
+    data = get_story_history()
+    data.setdefault("used", {})[date_str] = template_name
+    order = [x for x in data.get("order", []) if x != template_name]
+    order.append(template_name)
+    data["order"] = order
+    try:
+        STORY_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(STORY_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Erreur enregistrement historique story : {e}")
+
+
+def pick_next_story_template(templates: list[Path]) -> Path:
+    """
+    Selects a story template ensuring strict rotation:
+    - Never repeats the template used yesterday or in the last N days.
+    - Excludes recent templates to maximize visual diversity.
+    """
+    if not templates:
+        raise FileNotFoundError(f"Aucune photo trouvée dans le dossier {UPLOADS_STORIES_DIR}.")
+    if len(templates) == 1:
+        return templates[0]
+
+    data = get_story_history()
+    recent_order = data.get("order", [])
+
+    # Exclure jusqu'à 70% des derniers templates utilisés (min 1, max 14)
+    max_recent = max(1, min(len(templates) - 1, 14))
+    recent_set = set(recent_order[-max_recent:]) if recent_order else set()
+
+    candidates = [t for t in templates if t.name not in recent_set]
+    if not candidates:
+        # Si tous sont passés, prendre ceux qui n'ont pas été utilisés le plus récemment
+        candidates = templates
+
+    return random.choice(candidates)
+
 
 def get_today_hours(target_date: datetime.date | None = None) -> tuple[str, str]:
     """Returns (day_name_fr, hours_str) for given date (defaults to today)."""
@@ -27,11 +84,11 @@ def get_today_hours(target_date: datetime.date | None = None) -> tuple[str, str]
 
 def list_story_templates() -> list[Path]:
     """List all available story template photos in uploads/stories."""
-    valid_exts = {".png", ".jpg", ".jpeg", ".PNG", ".JPG", ".JPEG"}
-    return [
+    valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".PNG", ".JPG", ".JPEG", ".WEBP"}
+    return sorted([
         p for p in UPLOADS_STORIES_DIR.iterdir()
         if p.is_file() and p.suffix in valid_exts and not p.name.startswith(".")
-    ]
+    ], key=lambda x: x.name)
 
 
 def generate_daily_story(
@@ -51,7 +108,7 @@ def generate_daily_story(
         )
 
     if source_image is None or not source_image.exists():
-        source_image = random.choice(templates)
+        source_image = pick_next_story_template(templates)
 
     day_fr, hours = get_today_hours(target_date)
     if custom_hours:
@@ -96,13 +153,16 @@ def generate_daily_story(
     output_path = PROCESSED_STORIES_DIR / output_filename
     final_img.save(output_path, "PNG", quality=95)
 
+    date_iso = (target_date or datetime.date.today()).strftime("%Y-%m-%d")
+    record_used_story_template(str(source_image.name), date_iso)
+
     return {
         "status": "success",
         "output_path": str(output_path),
         "source_image": str(source_image.name),
         "day": day_fr,
         "hours": hours_text,
-        "date": (target_date or datetime.date.today()).isoformat(),
+        "date": date_iso,
     }
 
 

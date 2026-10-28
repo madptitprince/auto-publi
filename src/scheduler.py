@@ -496,16 +496,18 @@ def generate_daily_preview(
     # 1. Pre-generate today's story image + 15s MP4 video with daily audio (uniquement si generate_story est True, donc creneau 1 a 11h30)
     story_img_name = f"story_{date_str}.png"
     story_vid_name = f"story_{date_str}.mp4"
+    source_story_template = None
     if generate_story:
         try:
             story_res = generate_daily_story(target_date=target, output_filename=story_img_name)
+            source_story_template = story_res.get("source_image")
             create_story_video(
                 image_path=Path(story_res["output_path"]),
                 target_date=target,
                 duration=15,
                 output_filename=story_vid_name,
             )
-            print(f"[{date_str}] Story video 15s pre-generee pour le creneau {slot_index} (11h30).")
+            print(f"[{date_str}] Story video 15s pre-generee avec {source_story_template} pour le creneau {slot_index} (11h30).")
         except Exception as e_story:
             print(f"Erreur pre-generation story : {e_story}")
     else:
@@ -596,6 +598,7 @@ def generate_daily_preview(
         "contexte": ai_data.get("contexte", ""),
         "story_image": story_img_name,
         "story_video": story_vid_name,
+        "source_story_template": source_story_template,
         "processed_video": output_video_name,
         "cover_image": cover_image_name,
         "is_published": is_already_published,

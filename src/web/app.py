@@ -1,11 +1,13 @@
 import os
 import json
 import time
+import uuid
 import shutil
 import datetime
 import subprocess
 import threading
 from pathlib import Path
+from PIL import Image
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -52,7 +54,13 @@ from src.scheduler import (
     generate_daily_preview,
 )
 from src.video_processor import process_video_with_hook
-from src.story_generator import list_story_templates, get_today_hours, generate_daily_story
+from src.story_generator import (
+    list_story_templates,
+    get_today_hours,
+    generate_daily_story,
+    create_story_video,
+    record_used_story_template,
+)
 from src.ai_analyzer import analyze_video_with_gemini
 
 app = FastAPI(title="BCHEF Bourges - Automatisation")
@@ -340,6 +348,7 @@ async def dashboard(request: Request):
             "videos": videos,
             "archived_videos": archived_videos,
             "stories": stories,
+            "today_story_source": (today_preview or {}).get("source_story_template", ""),
             "history": history,
             "latest_story": latest_story,
             "latest_story_video": latest_story_video,
@@ -413,11 +422,45 @@ async def delete_archive_endpoint(filename: str):
 
 @app.post("/api/upload/story")
 async def upload_story(file: UploadFile = File(...)):
-    filename = file.filename or "story.png"
-    target_path = UPLOADS_STORIES_DIR / filename
+    raw_name = file.filename or "story.png"
+    raw_path = Path(raw_name)
+    stem = raw_path.stem.strip().replace(" ", "_")
+    ext = raw_path.suffix.lower()
+
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".heic"):
+        ext = ".png"
+
+    # Nom unique pour eviter les collisions sur les noms generiques smartphones (image.jpg, photo.png...)
+    generic_stems = {"image", "photo", "fullsizerender", "story", "img", "capture"}
+    target_name = f"{stem}{ext}"
+    target_path = UPLOADS_STORIES_DIR / target_name
+    if target_path.exists() or stem.lower() in generic_stems:
+        uid = uuid.uuid4().hex[:6]
+        target_name = f"{stem}_{uid}{ext}"
+        target_path = UPLOADS_STORIES_DIR / target_name
+
     with open(target_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return {"status": "success", "filename": filename}
+
+    # Conversion automatique si WebP ou HEIC
+    if ext in (".webp", ".heic"):
+        converted_name = f"{stem}_{uuid.uuid4().hex[:6]}.png"
+        converted_path = UPLOADS_STORIES_DIR / converted_name
+        converted_ok = False
+        try:
+            with Image.open(target_path) as img:
+                img.convert("RGB").save(converted_path, "PNG")
+                converted_ok = True
+        except Exception:
+            res = subprocess.run(["convert", str(target_path), str(converted_path)], capture_output=True)
+            if res.returncode == 0 and converted_path.exists():
+                converted_ok = True
+
+        if converted_ok:
+            target_path.unlink(missing_ok=True)
+            target_name = converted_name
+
+    return {"status": "success", "filename": target_name}
 
 
 @app.delete("/api/stories/{filename}")
@@ -437,6 +480,51 @@ async def preview_custom_story(story_name: str = Form(...)):
     out_name = f"preview_{story_name}"
     res = generate_daily_story(source_image=source, output_filename=out_name)
     return {"status": "success", "preview_url": f"/media/processed/stories/{out_name}"}
+
+
+@app.post("/api/story/select-for-today")
+async def select_story_for_today(source_image: str = Form(...)):
+    source = UPLOADS_STORIES_DIR / source_image
+    if not source.exists():
+        raise HTTPException(status_code=404, detail="Template introuvable")
+
+    today = datetime.date.today()
+    date_str = today.strftime("%Y-%m-%d")
+    story_img_name = f"story_{date_str}.png"
+    story_vid_name = f"story_{date_str}.mp4"
+
+    # Regénération immédiate de l'image story du jour
+    res = generate_daily_story(
+        source_image=source,
+        target_date=today,
+        output_filename=story_img_name,
+    )
+
+    # Regénération immédiate de la vidéo story MP4 15s avec l'audio du jour
+    create_story_video(
+        image_path=Path(res["output_path"]),
+        target_date=today,
+        duration=15,
+        output_filename=story_vid_name,
+    )
+
+    # Mise à jour de l'aperçu du jour dans today_preview.json
+    today_preview = get_today_preview() or {}
+    today_preview["date"] = date_str
+    today_preview["story_image"] = story_img_name
+    today_preview["story_video"] = story_vid_name
+    today_preview["source_story_template"] = source_image
+    save_today_preview(today_preview)
+
+    # Enregistrement dans l'historique anti-répétition
+    record_used_story_template(source_image, date_str)
+
+    return {
+        "status": "success",
+        "message": f"Story du jour mise à jour avec succès avec {source_image} !",
+        "story_image": f"/media/processed/stories/{story_img_name}",
+        "story_video": f"/media/processed/stories/{story_vid_name}",
+    }
 
 
 publication_status = {
