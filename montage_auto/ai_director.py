@@ -96,23 +96,25 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
 
         prompt = (
             "Tu es un chef monteur expert en Reels et TikTok viraux pour BCHEF Bourges (13 place Gordaine).\n"
-            "Analyse ultra-precisement les paroles, silences et temps morts de ce rush video brut :\n"
-            "1. Visuel : Qui sont les personnes, que font-elles precisement (actions, regards, mimiques, objets/plats manipules) ?\n"
-            "2. Paroles : Y a-t-il des dialogues ou est-ce muet / bruit ambiant ? Transcris fidelement les propos prononces.\n"
-            "3. Rôle narratif : Est-ce une mise en place de vanne (feinte), une chute comique, une commande en cuisine, ou un moment produit/service burger gourmand ?\n"
+            "Analyse ultra-precisement les visuels, paroles, silences et temps morts de ce rush video brut :\n"
+            "1. Visuel : Qui sont les personnes, que font-elles precisement (actions, regards, mimiques, objets/plats manipules) ? "
+            "Detecte imperativement les sketchs visuels ou mimes bases sur le comportement ou le changement de vitesse (ex: travailler tres lentement quand on est seul vs s'activer frenetiquement des qu'un responsable ou collegue arrive pour faire semblant d'etre deborde, puis ralentir des qu'il repart).\n"
+            "2. Paroles : Y a-t-il de VRAIS dialogues intelligibles en francais ou est-ce muet / bruit ambiant / onomatopees / respiration ? "
+            "ATTENTION FORMELLE : Si aucun mot reel n'est prononce, ecris STRICTEMENT 'AUCUN'. Ne JAMAIS halluciner ou inventer de faux dialogues a partir de bruits de couteau, de souffle ou de bruits de cuisine.\n"
+            "3. Rôle narratif : Est-ce un sketch comique visuel (gag de vitesse/surveillance de responsable), une mise en place de vanne parlee, une chute comique, ou un moment burger gourmand ?\n"
             "4. Horodatages chirurgicaux de parole & silences :\n"
-            "   - debut_parole : seconde exacte ou la personne commence a parler (ou debut de l'action narrative clef).\n"
-            "   - fin_parole : seconde exacte ou la personne termine sa derniere replique / punchline / mot prononce.\n"
-            "   - pause_debut_secondes : secondes de flottement ou d'attente au tout debut avant que la parole/action commence.\n"
-            "   - pause_fin_secondes : secondes de silence, hesitation, regard camera fixe ou attente a la fin apres la derniere parole.\n"
-            "   - cut_in_recommande : horodatage ideal de debut pour couper l'attente initiale et demarrer direct sur l'action.\n"
-            "   - cut_out_recommande : horodatage ideal de fin pour couper NET des la fin de la parole sans aucun temps mort.\n"
-            "   - action_fin : description de ce qui se passe a la fin du rush (ex: silence, sourit, regarde la camera, attend, coupe le tel).\n\n"
+            "   - debut_parole : seconde exacte ou commence la parole (ou l'action comique clef).\n"
+            "   - fin_parole : seconde exacte ou se termine la replique ou l'action comique.\n"
+            "   - pause_debut_secondes : secondes d'attente au debut avant que l'action commence.\n"
+            "   - pause_fin_secondes : secondes de flottement a la fin apres la fin de l'action.\n"
+            "   - cut_in_recommande : horodatage ideal de debut pour demarrer direct sur l'action.\n"
+            "   - cut_out_recommande : horodatage ideal de fin pour couper NET sans temps mort.\n"
+            "   - action_fin : description de la fin du rush (ex: sourit, regarde camera, coupe).\n\n"
             "Reponds STRICTEMENT en JSON valide :\n"
             "{\n"
             '  "visuel": "description detaillee des actions et expressions",\n'
             '  "dialogues": "mots prononces mot a mot ou AUCUN",\n'
-            '  "role": "feinte / chute / service / cuisine / echange",\n'
+            '  "role": "sketch_visuel / feinte / chute / service / cuisine / echange",\n'
             '  "ton": "humour / culinaire / rush",\n'
             '  "debut_parole": 0.0,\n'
             '  "fin_parole": 15.2,\n'
@@ -216,28 +218,36 @@ EXIGENCES CAPITALES DE RYTHME ET COUPE (PACING VIRAL TIKTOK / REELS) :
      * Si le dialogue ou l'histoire a besoin de 30s a 38s pour que la punchline finale et la chute soient entieres sans etre coupees, utilise le temps necessaire jusqu'a 40s maximum.
      * PLAFOND STRICT RESEAUX SOCIAUX : MAXIMUM ABSOLU DE 40.0 SECONDES. Ne depasse jamais 40.0s.
      * NE COUPE JAMAIS LA PAROLE OU LA PUNCHLINE EN PLEIN MILIEU pour respecter un quota arbitraire.
-4. COMPREHENSION NARRATIVE REELLE :
+4. COMPREHENSION NARRATIVE REELLE ET SKETCHS VISUELS :
    - Explique ce qu'il se passe reellement :
-     * Si c'est un sketch a plusieurs rushs (ex: vanne entre equipiers, faux pretexte, arnaque amicale pour un chiller, planning ou conges refuses, Moses qui a des privileges), comprends l'intrigue complete !
-     * Ordonne chronologiquement les segments : la mise en place d'abord (Setup), puis la chute (Punchline).
-     * Si c'est une sequence foodie (burger, frites, service), cadence le rythme sur la gourmandise.
+     * SKETCH COMIFIQUE VISUEL OU MIME (ex: l'employee travaille tres lentement quand elle est seule, mais passe en mode turbo des que le responsable debarque, puis ralentit aussitot des qu'il repart) :
+       - Comprends l'histoire comique et le comique de situation (effet de contraste de vitesse et de zele sous les yeux du chef).
+       - NE GENERE SURTOUT PAS de faux sous-titres de paroles inventees !
+       - Genere un Hook percutant (ex: 'QUAND LE RESPONSABLE DEBARQUE DERRIERE TOI').
+       - Decoupe le rush en segments chronologiques (ex: phase ralenti seul -> phase turbo avec responsable -> phase retour au calme).
+       - Tu peux ajouter optionnellement '"speed": 1.25' sur le segment d'activite intense pour amplifier visuellement le comique du mode turbo !
+     * SKETCH AVEC DIALOGUES ENTRE EQUIPES (ex: conges refuses, privileges de Moses, arnaque amicale pour un chiller) :
+       - Comprends l'histoire complete, ordonne chronologiquement : Setup puis Punchline.
+     * SEQUENCE FOODIE (burger, frites, service) :
+       - Cadence le rythme sur la gourmandise.
+   - Ne confonds JAMAIS un sketch d'employe qui mime ou joue une comedie au travail avec une video corporate de preparation de burger !
 5. HABILLAGE SONORE ET SOUND EFFECTS (SFX) :
    - Style musical ('comedy', 'lofi', 'tension', 'upbeat') :
-     * 'comedy' : vannes, sketchs, complicite entre collegues.
+     * 'comedy' : vannes, sketchs, complicite entre collegues, gags visuels.
      * 'lofi' : moments gourmands, service en salle, ambiance cosy.
      * 'tension' : faux drame, secrets de cuisine, privileges.
      * 'upbeat' : rush du midi, dynamique de service.
    - Points d'effets sonores (SFX) a placer a des horodatages precis :
-     * 'whoosh' : transition dynamique lors d'un changement de plan.
-     * 'record_scratch' : rupture comique, arret net quand la verite eclate.
+     * 'whoosh' : transition dynamique lors d'un changement de plan ou arrivee impromptue du chef.
+     * 'record_scratch' : rupture comique, arret net quand le chef tourne le dos ou que la verite eclate.
      * 'comedy_punch' : gros impact comique sur la chute humoristique.
      * 'ding' ou 'pop' : mise en valeur gourmande ou revelation.
 6. HOOK, DESCRIPTION ET HASHTAGS (STYLE OFFICIEL BOURGES, SANS AUCUN EMOJI) :
    - Hook : MAJUSCULES, 6 a 9 mots max, percutant, stoppant le scroll (SANS AUCUN EMOJI).
-     Exemples reels : 'QUAND LE RUSH COMMENCE ET QUE TON COLLEGUE DISPARAIT', 'QUAND UNE CLIENTE DEPASSE TOTALEMENT LES BORNES', 'LE PETIT PREFERE DE LA CUISINE'.
+     Exemples reels : 'QUAND LE RESPONSABLE DEBARQUE DERRIERE TOI', 'QUAND LE RUSH COMMENCE ET QUE TON COLLEGUE DISPARAIT', 'LE PETIT PREFERE DE LA CUISINE'.
    - Description : 1 seule phrase courte et naturelle incitant a l'interaction (SANS EMOJI et JAMAIS de blabla corporate type brochure).
-     Exemples reels : 'Et vous, vous arrivez a tenir combien de temps sans faire de pause en plein coup de feu ?' ou 'Tague la personne de ton equipe a qui tu refiles toujours cette corvee en commentaire.'
-   - Hashtags : 5 hashtags cibles parmi #bchef #bourges #restauration #viedequipe #humour #convivial #burger (SANS EMOJI).
+     Exemples reels : 'Identifie le collegue qui passe en mode turbo des que le chef passe une tete en cuisine.' ou 'Tague la personne de ton equipe a qui tu refiles toujours cette corvee en commentaire.'
+   - Hashtags : 5 hashtags cibles parmi #bchef #bourges #restauration #viedequipe #humour #manager #convivial #burger (SANS EMOJI).
 
 Reponds STRICTEMENT en format JSON valide :
 {{
@@ -249,12 +259,13 @@ Reponds STRICTEMENT en format JSON valide :
   "musique_style": "{music_mode if music_mode != 'auto' else 'comedy'}",
   "mix_voix": true,
   "segments": [
-    {{"file_index": 1, "start": 0.2, "end": 7.4, "label": "Mise en place sans temps mort"}},
-    {{"file_index": 0, "start": 0.1, "end": 8.2, "label": "Chute coupe des la fin de parole"}}
+    {{"file_index": 0, "start": 0.0, "end": 7.2, "speed": 1.0, "label": "Rythme ralenti seul"}},
+    {{"file_index": 0, "start": 7.2, "end": 13.8, "speed": 1.25, "label": "Mode turbo responsable arrive"}},
+    {{"file_index": 0, "start": 13.8, "end": 19.4, "speed": 1.0, "label": "Retour au calme responsable repart"}}
   ],
   "sfx": [
     {{"time": 7.2, "type": "whoosh", "volume": 0.85}},
-    {{"time": 12.0, "type": "comedy_punch", "volume": 0.85}}
+    {{"time": 12.5, "type": "record_scratch", "volume": 0.85}}
   ]
 }}
 """
