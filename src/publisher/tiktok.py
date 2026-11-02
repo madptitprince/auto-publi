@@ -41,6 +41,19 @@ class TikTokPublisher:
         else:
             self.cookies_path = TIKTOK_COOKIES_FILE
 
+    def _save_fresh_cookies(self, context):
+        """Sauvegarde les cookies rafraichis par TikTok pour etendre la validite de la session."""
+        try:
+            if not context:
+                return
+            fresh = context.cookies()
+            if fresh and any(c.get("name") in ("sessionid", "sessionid_ss") for c in fresh):
+                with open(self.cookies_path, "w", encoding="utf-8") as f:
+                    json.dump(fresh, f, indent=2, ensure_ascii=False)
+                print(f"Session TikTok rafraichie et sauvegardee dans {self.cookies_path.name}")
+        except Exception as e:
+            print(f"Impossible de rafraichir les cookies TikTok: {e}")
+
     def _dismiss_modals(self, page):
         """Ferme ou neutralise les modales, tutoriels et popups dans TikTok Studio."""
         # 1. Boutons d'action usuels des modales et alertes (Turn on, Got it, etc.)
@@ -219,6 +232,7 @@ class TikTokPublisher:
                 page.goto("https://www.tiktok.com/tiktokstudio/upload", wait_until="domcontentloaded")
                 time.sleep(5)
                 self._dismiss_modals(page)
+                self._save_fresh_cookies(context)
 
                 # 2. Selection du fichier video avec retry si necessaire
                 editor = page.locator('div[contenteditable="true"]').first
@@ -400,6 +414,7 @@ class TikTokPublisher:
                     except Exception:
                         pass
 
+                    self._save_fresh_cookies(context)
                     browser.close()
                     if is_published:
                         return {
@@ -423,6 +438,7 @@ class TikTokPublisher:
                         page.screenshot(path=str(err_screenshot))
                     except Exception:
                         pass
+                    self._save_fresh_cookies(context)
                     browser.close()
                     return {
                         "platform": "tiktok",
@@ -440,6 +456,7 @@ class TikTokPublisher:
                 pass
             if browser:
                 try:
+                    self._save_fresh_cookies(context)
                     browser.close()
                 except Exception:
                     pass

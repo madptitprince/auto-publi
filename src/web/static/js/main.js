@@ -603,3 +603,70 @@ async function saveFrequencySettings() {
     showToast("Erreur reseau lors de l'enregistrement.", true);
   }
 }
+
+function openTikTokCookiesModal(profile) {
+  const targetInput = document.getElementById("tiktok-cookies-target-profile");
+  const titleEl = document.getElementById("modal-tiktok-title");
+  const inputEl = document.getElementById("tiktok-cookies-input");
+
+  if (targetInput) targetInput.value = profile;
+  if (titleEl) {
+    titleEl.textContent = "Mise a jour des cookies TikTok (" + (profile === "official" ? "Compte Officiel BCHEF" : "Compte Test") + ")";
+  }
+  if (inputEl) inputEl.value = "";
+  openModal("modal-tiktok-cookies");
+}
+
+function closeTikTokCookiesModal() {
+  closeModal("modal-tiktok-cookies");
+}
+
+async function submitTikTokCookies() {
+  const profile = document.getElementById("tiktok-cookies-target-profile")?.value || "official";
+  const rawData = document.getElementById("tiktok-cookies-input")?.value?.trim() || "";
+  if (!rawData) {
+    showToast("Veuillez coller le contenu des cookies TikTok.", true);
+    return;
+  }
+
+  const btn = document.getElementById("btn-save-tiktok-cookies");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = "<span>Enregistrement...</span>";
+  }
+
+  showToast("Analyse et enregistrement des cookies TikTok...");
+  try {
+    const formData = new FormData();
+    formData.append("profile", profile);
+    formData.append("cookies_data", rawData);
+
+    const res = await fetch("/api/settings/tiktok-cookies", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (res.status === 401) {
+      showToast("Session expiree. Reconnexion requise...", true);
+      setTimeout(() => location.href = "/login", 1200);
+      return;
+    }
+
+    const data = await res.json();
+    if (res.ok && data.status === "success") {
+      showToast(data.message || "Cookies TikTok enregistres avec succes !");
+      closeTikTokCookiesModal();
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      showToast(data.detail || data.message || "Erreur lors de l'enregistrement des cookies.", true);
+    }
+  } catch (err) {
+    showToast("Erreur reseau lors de l'envoi des cookies.", true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span>Enregistrer les cookies</span>';
+    }
+  }
+}
+

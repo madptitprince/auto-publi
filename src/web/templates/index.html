@@ -584,14 +584,17 @@
               </div>
               <div class="form-group form-group-last">
                 <label class="form-label">TikTok</label>
-                <div>
-                  {% if tiktok_test_status %}
-                  <span class="badge {{ tiktok_test_status.badge_class }}">{{ tiktok_test_status.label }}</span>
-                  {% elif has_tiktok_test %}
-                  <span class="badge badge-emerald">Session active</span>
-                  {% else %}
-                  <span class="badge badge-rose">Session absente</span>
-                  {% endif %}
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                  <div>
+                    {% if tiktok_test_status %}
+                    <span class="badge {{ tiktok_test_status.badge_class }}">{{ tiktok_test_status.label }}</span>
+                    {% elif has_tiktok_test %}
+                    <span class="badge badge-emerald">Session active</span>
+                    {% else %}
+                    <span class="badge badge-rose">Session absente</span>
+                    {% endif %}
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="openTikTokCookiesModal('test')" style="font-size: 0.75rem; padding: 3px 8px;">Mettre a jour</button>
                 </div>
               </div>
             </div>
@@ -612,14 +615,17 @@
               </div>
               <div class="form-group form-group-last">
                 <label class="form-label">TikTok</label>
-                <div>
-                  {% if tiktok_official_status %}
-                  <span class="badge {{ tiktok_official_status.badge_class }}">{{ tiktok_official_status.label }}</span>
-                  {% elif has_tiktok_official %}
-                  <span class="badge badge-emerald">Session active</span>
-                  {% else %}
-                  <span class="badge badge-amber">Session manquante</span>
-                  {% endif %}
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                  <div>
+                    {% if tiktok_official_status %}
+                    <span class="badge {{ tiktok_official_status.badge_class }}">{{ tiktok_official_status.label }}</span>
+                    {% elif has_tiktok_official %}
+                    <span class="badge badge-emerald">Session active</span>
+                    {% else %}
+                    <span class="badge badge-amber">Session manquante</span>
+                    {% endif %}
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="openTikTokCookiesModal('official')" style="font-size: 0.75rem; padding: 3px 8px;">Mettre a jour</button>
                 </div>
               </div>
             </div>
@@ -743,6 +749,28 @@
         <button class="btn btn-emerald btn-sm" onclick="applyModalStoryToday()">
           <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
           <span>Choisir pour aujourd'hui</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal TikTok Cookies -->
+  <div id="modal-tiktok-cookies" class="modal-backdrop" onclick="closeTikTokCookiesModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h4 id="modal-tiktok-title" style="font-size: 1rem; font-weight: 700;">Mise a jour des cookies TikTok</h4>
+        <button class="btn btn-secondary btn-sm" onclick="closeTikTokCookiesModal()">Fermer</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+        Collez ci-dessous vos cookies TikTok (texte brut copie depuis <code>Cookie-Editor</code> ou l'inspecteur Chrome <code>Application > Cookies</code>, ou tableau JSON) :
+      </p>
+      <input type="hidden" id="tiktok-cookies-target-profile" value="official">
+      <textarea id="tiktok-cookies-input" class="form-input" rows="8" placeholder="cmpl_token AgQQAPObF...&#10;sessionid ce5c9a6e62...&#10;sid_guard ce5c9a6e62..." style="font-family: monospace; font-size: 0.8rem; line-height: 1.4; resize: vertical; width: 100%;"></textarea>
+      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;">
+        <button class="btn btn-secondary btn-sm" onclick="closeTikTokCookiesModal()">Annuler</button>
+        <button class="btn btn-primary btn-sm" id="btn-save-tiktok-cookies" onclick="submitTikTokCookies()">
+          <svg class="icon-sm icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Enregistrer les cookies</span>
         </button>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import uuid
@@ -241,6 +242,85 @@ def get_tiktok_session_status(cookies_file_name: str) -> dict:
         return {"exists": True, "status": "active", "badge_class": "badge-emerald", "label": "Session active"}
     except Exception:
         return {"exists": True, "status": "error", "badge_class": "badge-amber", "label": "Erreur cookies"}
+
+
+def parse_raw_or_json_cookies(cookie_input: str) -> list[dict]:
+    raw = (cookie_input or "").strip()
+    if not raw:
+        return []
+    if raw.startswith("[") and raw.endswith("]"):
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict) and "name" in data[0]:
+                return data
+        except Exception:
+            pass
+
+    parsed = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.lower().startswith("les nouvelles cookies "):
+            line = line[len("les nouvelles cookies "):].strip()
+        if "comment faire pour" in line:
+            line = line.split("comment faire pour")[0].strip()
+
+        m = re.search(r"(\.[a-zA-Z0-9_\.-]*tiktok\.com|www\.tiktok\.com)\s+(/\S*)\s+", line)
+        if not m:
+            continue
+        domain = m.group(1)
+        path = m.group(2)
+        prefix = line[:m.start()].strip()
+        suffix = line[m.end():].strip()
+
+        parts = prefix.split(None, 1)
+        name = parts[0]
+        val = parts[1] if len(parts) > 1 else ""
+
+        expires = -1
+        date_m = re.search(r"(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2})", suffix)
+        if date_m:
+            try:
+                dt = datetime.datetime.strptime(date_m.group(1), "%d/%m/%Y %H:%M:%S")
+                expires = int(dt.timestamp())
+                after_exp = suffix[date_m.end():].strip()
+            except Exception:
+                after_exp = suffix
+        else:
+            sess_m = re.search(r"Session", suffix, re.IGNORECASE)
+            if sess_m:
+                expires = -1
+                after_exp = suffix[sess_m.end():].strip()
+            else:
+                after_exp = suffix
+
+        checkmarks = after_exp.count("✓")
+        http_only = checkmarks >= 2
+        secure = True
+        if name in [
+            "sessionid", "sessionid_ss", "sid_guard", "sid_tt", "sid_ucp_v1", "ssid_ucp_v1",
+            "cmpl_token", "tt_csrf_token", "tt_session_tlb_tag", "ttwid", "uid_tt", "uid_tt_ss", "multi_sids"
+        ] or name.startswith("passport-sotl-auth-token-nonce_"):
+            http_only = True
+
+        same_site = "Lax"
+        if "None" in after_exp:
+            same_site = "None"
+        elif "Strict" in after_exp:
+            same_site = "Strict"
+
+        parsed.append({
+            "name": name,
+            "value": val,
+            "domain": domain,
+            "path": path,
+            "expires": expires,
+            "httpOnly": http_only,
+            "secure": secure,
+            "sameSite": same_site
+        })
+    return parsed
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -807,6 +887,49 @@ async def update_publication_frequency(posts_per_day: int = Form(...)):
         "status": "success",
         "posts_per_day": posts_per_day,
         "message": f"Frequence mise a jour avec succes : {posts_per_day} publication(s) par jour.",
+    }
+
+
+@app.post("/api/settings/tiktok-cookies")
+async def update_tiktok_cookies(
+    profile: str = Form("official"),
+    cookies_data: str = Form(...),
+):
+    social_cfg = get_social_settings()
+    target_prof = profile if profile in social_cfg.get("profiles", {}) else social_cfg.get("active_profile", "official")
+    cookies_filename = social_cfg.get("profiles", {}).get(target_prof, {}).get("tiktok_cookies_file")
+    if not cookies_filename:
+        cookies_filename = "tiktok_cookies_official.json" if target_prof == "official" else "tiktok_cookies.json"
+
+    cookies = parse_raw_or_json_cookies(cookies_data)
+    if not cookies:
+        raise HTTPException(
+            status_code=400,
+            detail="Aucun cookie TikTok valide detecte. Verifiez le format copie (Cookie-Editor ou DevTools).",
+        )
+
+    session_c = next((c for c in cookies if c.get("name") in ("sessionid", "sessionid_ss")), None)
+    if not session_c:
+        raise HTTPException(
+            status_code=400,
+            detail="Le cookie de session 'sessionid' est manquant dans les donnees fournies.",
+        )
+
+    target_file = DATA_DIR / cookies_filename
+    with open(target_file, "w", encoding="utf-8") as f:
+        json.dump(cookies, f, indent=2, ensure_ascii=False)
+
+    status = get_tiktok_session_status(cookies_filename)
+    exp_str = "Session active"
+    if session_c.get("expires") and session_c["expires"] > 0:
+        exp_str = datetime.datetime.fromtimestamp(session_c["expires"]).strftime("%d/%m/%Y a %H:%M")
+
+    return {
+        "status": "success",
+        "message": f"{len(cookies)} cookies TikTok enregistres avec succes pour le compte {target_prof} (expire le {exp_str}).",
+        "cookie_count": len(cookies),
+        "session_status": status,
+        "profile": target_prof,
     }
 
 
