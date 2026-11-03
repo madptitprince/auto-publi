@@ -230,6 +230,39 @@ class InstagramPublisher:
                 "error": str(e),
             }
 
+    def _ensure_compatible_reel_video(self, video_path: Path) -> Path:
+        """Verifie et normalise le taux d'echantillonnage audio (44100 Hz) requis par Instagram."""
+        try:
+            cmd = [
+                "ffprobe", "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=sample_rate",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(video_path),
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            sr_str = res.stdout.strip()
+            if sr_str.isdigit():
+                sr = int(sr_str)
+                if sr > 48000 or sr < 44100:
+                    normalized = video_path.parent / f"ig_{video_path.name}"
+                    print(f"Normalisation audio Instagram ({sr}Hz -> 44100Hz) : {normalized.name}...", flush=True)
+                    cmd_conv = [
+                        "ffmpeg", "-y", "-loglevel", "error",
+                        "-i", str(video_path),
+                        "-c:v", "copy",
+                        "-c:a", "aac",
+                        "-b:a", "192k",
+                        "-ar", "44100",
+                        "-movflags", "+faststart",
+                        str(normalized),
+                    ]
+                    subprocess.run(cmd_conv, check=True)
+                    return normalized
+        except Exception as e:
+            print(f"Avertissement normalisation video Instagram : {e}", flush=True)
+        return video_path
+
     def publish_reel(
         self,
         video_path: Path,
@@ -257,6 +290,7 @@ class InstagramPublisher:
 
         try:
             cl = self._get_client()
+            video_to_upload = self._ensure_compatible_reel_video(video_path)
             thumbnail = str(cover_path) if cover_path and cover_path.exists() else None
 
             # 1. Location tagging

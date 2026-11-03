@@ -223,6 +223,7 @@ def process_video_with_hook(
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-b:a", "192k",
+        "-ar", "44100",
         "-movflags", "+faststart",
         str(output_path),
     ]

@@ -695,8 +695,47 @@
                 <td data-label="Video"><strong>{{ item.raw_video or '-' }}</strong></td>
                 <td data-label="Story">{{ item.story.day if item.story else '-' }} ({{ item.story.hours if item.story else '-' }})</td>
                 <td data-label="Accroche" style="max-width: 260px; font-style: italic;">"{{ item.ai_analysis.hook if item.ai_analysis else '-' }}"</td>
-                <td data-label="Instagram"><span class="badge badge-blue">Reel & Story prets</span></td>
-                <td data-label="TikTok"><span class="badge badge-blue">Video prete</span></td>
+                <td data-label="Instagram">
+                  {% set ns = namespace(has_ig=false) %}
+                  <div style="display: flex; flex-direction: column; gap: 4px;">
+                  {% for p in item.publications or [] %}
+                    {% if p.platform == 'instagram' %}
+                      {% set ns.has_ig = true %}
+                      {% set label = 'Reel' if p.type == 'reel' else 'Story' %}
+                      {% if p.status == 'published' %}
+                        <span class="badge badge-emerald">{{ label }} publie</span>
+                      {% elif p.status == 'simulated' %}
+                        <span class="badge badge-blue">{{ label }} simule</span>
+                      {% else %}
+                        <span class="badge badge-rose" title="{{ p.error or p.message or '' }}">{{ label }} echec</span>
+                      {% endif %}
+                    {% endif %}
+                  {% endfor %}
+                  {% if not ns.has_ig %}
+                    <span class="badge badge-blue">-</span>
+                  {% endif %}
+                  </div>
+                </td>
+                <td data-label="TikTok">
+                  {% set ns_tt = namespace(has_tt=false) %}
+                  <div style="display: flex; flex-direction: column; gap: 4px;">
+                  {% for p in item.publications or [] %}
+                    {% if p.platform == 'tiktok' %}
+                      {% set ns_tt.has_tt = true %}
+                      {% if p.status == 'published' %}
+                        <span class="badge badge-emerald">Publie</span>
+                      {% elif p.status == 'simulated' %}
+                        <span class="badge badge-blue">Simule</span>
+                      {% else %}
+                        <span class="badge badge-rose" title="{{ p.error or p.message or '' }}">Echec</span>
+                      {% endif %}
+                    {% endif %}
+                  {% endfor %}
+                  {% if not ns_tt.has_tt %}
+                    <span class="badge badge-blue">-</span>
+                  {% endif %}
+                  </div>
+                </td>
               </tr>
               {% else %}
               <tr>

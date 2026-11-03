@@ -771,7 +771,8 @@ async def trigger_tiktok_retry(simulation: bool = Form(False)):
     social_cfg = get_social_settings()
     target_prof = social_cfg.get("active_profile", "official")
 
-    res = publish_single_tiktok(
+    res = await asyncio.to_thread(
+        publish_single_tiktok,
         video_path=vid_path,
         caption=full_caption,
         target_profile=target_prof,
@@ -779,9 +780,58 @@ async def trigger_tiktok_retry(simulation: bool = Form(False)):
         location_query="BCHEF Bourges",
     )
 
-    if res.get("status") == "published":
+    if res.get("status") in ("published", "simulated"):
         pubs = today_preview.get("publications", [])
         pubs = [p for p in pubs if p.get("platform") != "tiktok"]
+        pubs.append(res)
+        today_preview["publications"] = pubs
+        save_today_preview(today_preview)
+
+    return res
+
+
+@app.post("/api/trigger/instagram-retry")
+async def trigger_instagram_retry(simulation: bool = Form(False)):
+    from src.publisher.instagram import InstagramPublisher
+    from src.config import PROCESSED_VIDEOS_DIR, get_social_settings
+    from src.scheduler import get_today_preview, save_today_preview
+
+    today_preview = get_today_preview()
+    if not today_preview or not today_preview.get("processed_video"):
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "error": "Aucune video traitee du jour disponible dans today_preview.json."}
+        )
+
+    vid_path = PROCESSED_VIDEOS_DIR / today_preview["processed_video"]
+    if not vid_path.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"status": "error", "error": f"Fichier video introuvable : {vid_path}"}
+        )
+
+    cover_name = today_preview.get("cover_image")
+    cover_path = (PROCESSED_VIDEOS_DIR / cover_name) if cover_name else None
+
+    caption_line = today_preview.get("description", "Rejoignez-nous chez BCHEF Bourges !")
+    hashtags = today_preview.get("hashtags", ["#bchef", "#bourges", "#burger"])
+    full_caption = f"{caption_line}\n\n{' '.join(hashtags)}"
+
+    social_cfg = get_social_settings()
+    target_prof = social_cfg.get("active_profile", "official")
+
+    insta = InstagramPublisher(target_profile=target_prof)
+    res = await asyncio.to_thread(
+        insta.publish_reel,
+        video_path=vid_path,
+        caption=full_caption,
+        cover_path=cover_path,
+        simulation=simulation,
+    )
+
+    if res.get("status") in ("published", "simulated"):
+        pubs = today_preview.get("publications", [])
+        pubs = [p for p in pubs if not (p.get("platform") == "instagram" and p.get("type") == "reel")]
         pubs.append(res)
         today_preview["publications"] = pubs
         save_today_preview(today_preview)

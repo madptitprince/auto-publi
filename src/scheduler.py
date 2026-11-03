@@ -422,8 +422,12 @@ def run_daily_publication(
         report["publications"].append(tiktok_res)
 
         # Step 6: Rotation & Archivage de la video
-        any_published_ok = any(p.get("status") == "published" for p in report["publications"])
-        if not is_simulation and any_published_ok:
+        video_published_ok = any(
+            p.get("status") == "published"
+            for p in report["publications"]
+            if p.get("type") in ("reel", "video")
+        )
+        if not is_simulation and video_published_ok:
             if progress_callback:
                 progress_callback("Rotation et archivage de la video...", 98)
             print(f"[{timestamp_str} slot {slot_index}] Etape 6 : Rotation et archivage de la video...")
@@ -450,10 +454,15 @@ def run_daily_publication(
                 today_preview["publications"] = report["publications"]
                 today_preview["report"] = report
                 save_today_preview(today_preview)
-        elif not is_simulation and not any_published_ok:
-            print(f"[{timestamp_str} slot {slot_index}] Avertissement : Aucune publication n'a reussi en production. La video n'est pas archivee.")
+        elif not is_simulation and not video_published_ok:
+            print(f"[{timestamp_str} slot {slot_index}] Avertissement : Ni le Reel ni TikTok n'ont pu etre publies en production. La video n'est pas archivee.")
+            if today_preview:
+                today_preview["is_published"] = False
+                today_preview["publications"] = report["publications"]
+                today_preview["report"] = report
+                save_today_preview(today_preview)
 
-        report["status"] = "success" if (is_simulation or any_published_ok) else "error"
+        report["status"] = "success" if (is_simulation or video_published_ok) else "error"
         if progress_callback:
             progress_callback("Publication terminee avec succes !" if report["status"] == "success" else "Echec de la publication.", 100 if report["status"] == "success" else -1)
         print(f"[{timestamp_str} slot {slot_index}] Publication terminee (status={report['status']})")
