@@ -212,6 +212,7 @@ def create_story_video(
     Renders a 15-second vertical MP4 video story from the image and today's day-specific audio track.
     Enables native Instagram Story playback with audio.
     """
+    image_path = Path(image_path)
     if not image_path.exists():
         raise FileNotFoundError(f"Image story introuvable : {image_path}")
 
@@ -243,6 +244,7 @@ def create_story_video(
             "-map", "[outa]",
             "-c:a", "aac",
             "-b:a", "192k",
+            "-ar", "44100",
         ])
     else:
         # Fallback silent audio if no audio file present
