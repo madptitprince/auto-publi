@@ -146,6 +146,16 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
                 data["cut_out_recommande"] = round(min(dur, max(data["cut_in_recommande"] + 0.8, float(data.get("cut_out_recommande", dur)))), 2)
                 data["pause_fin_secondes"] = round(max(0.0, float(data.get("pause_fin_secondes", dur - data["fin_parole"]))), 2)
                 data["action_fin"] = str(data.get("action_fin", "fin du clip"))
+
+                # For short clips (dur <= 6.0s) containing speech/dialogue:
+                # Multimodal timestamping often stops early at the first question and truncates the punchline/response.
+                # Guarantee that the end of short dialogue clips is never truncated.
+                has_speech = data.get("dialogues") and str(data.get("dialogues")).strip().upper() != "AUCUN"
+                if dur <= 6.0 and has_speech:
+                    data["fin_parole"] = dur
+                    data["cut_out_recommande"] = dur
+                    data["pause_fin_secondes"] = 0.0
+
                 return data
             except Exception as e:
                 print(f"[AI Director] Echec modele {model_name} sur rush {video_path.name}: {e}")
@@ -195,7 +205,7 @@ def synthesize_master_montage_plan(
             f"Rôle : {a.get('role')} | Ton : {a.get('ton')}\n"
             f"Parole detectee : de {a.get('debut_parole', 0.0)}s a {a.get('fin_parole', a.get('duration'))}s\n"
             f"Temps mort / Pause fin de rush : {a.get('pause_fin_secondes', 0.0)}s ({a.get('action_fin', 'pause')})\n"
-            f"Cuts recommandes : cut_in={a.get('cut_in_recommande', 0.0)}s, cut_out={a.get('cut_out_recommande', a.get('duration'))}s (COUPE OBLIGATOIREMENT AVANT LA PAUSE)\n"
+            f"Cuts recommandes : cut_in={a.get('cut_in_recommande', 0.0)}s, cut_out={a.get('cut_out_recommande', a.get('duration'))}s\n"
         )
 
     prompt = f"""Tu es le Chef Monteur et Directeur Artistique expert en Reels et TikTok viraux pour BCHEF Bourges (13 place Gordaine).
@@ -394,26 +404,32 @@ def validate_and_sanitize_plan(
         e = min(v_dur, max(s + 0.8, float(seg.get("end", s + 4.0))))
 
         # Precise dead pause trimming using rush analysis if available
-        # Trims confirmed dead air and hesitations on ANY rush (short or long) without cutting legitimate speech
+        # Trims confirmed dead air and hesitations on ANY rush without cutting legitimate speech or punchlines
         if rush_analyses and f_idx < len(rush_analyses):
             ra = rush_analyses[f_idx]
             rec_in = ra.get("cut_in_recommande")
             rec_out = ra.get("cut_out_recommande")
             fin_p = ra.get("fin_parole")
             pause_fin = float(ra.get("pause_fin_secondes", 0.0) or 0.0)
+            has_speech = ra.get("dialogues") and str(ra.get("dialogues")).strip().upper() != "AUCUN"
 
             # Prune initial dead hesitation if cut started at 0 and action/speech starts significantly later (>= 0.7s)
             if s < 0.2 and rec_in is not None and rec_in >= 0.7:
                 s = round(rec_in, 2)
 
-            # Trim trailing dead air ONLY if there is confirmed lingering pause (pause_fin >= 1.0s)
-            # and the planned end goes significantly past all speech/action (e > fin_p + 0.8s).
-            # Always leave a safety buffer of at least +0.4s so syllables / punchlines are never clipped.
-            if pause_fin >= 1.0 and fin_p and e > (fin_p + 0.8):
-                safe_out = max(rec_out if rec_out else 0.0, fin_p + 0.4)
-                e = min(v_dur, max(s + 0.8, round(safe_out, 2)))
-            elif rec_out and e > (rec_out + 0.8):
-                e = min(v_dur, max(s + 0.8, round(rec_out + 0.3, 2)))
+            # CRITICAL RULE: For short clips (v_dur <= 6.0s) with dialogue/speech,
+            # NEVER truncate the end (preserve the full punchline/response and comedy reaction).
+            if v_dur <= 6.0 and has_speech:
+                e = v_dur
+            else:
+                # Trim trailing dead air ONLY if there is confirmed lingering pause (pause_fin >= 1.2s)
+                # and the planned end goes significantly past all speech/action (e > fin_p + 1.0s).
+                # Always leave a safety buffer of at least +0.5s so syllables / punchlines are never clipped.
+                if pause_fin >= 1.2 and fin_p and e > (fin_p + 1.0):
+                    safe_out = max(rec_out if rec_out else 0.0, fin_p + 0.5)
+                    e = min(v_dur, max(s + 0.8, round(safe_out, 2)))
+                elif rec_out and e > (rec_out + 1.0):
+                    e = min(v_dur, max(s + 0.8, round(rec_out + 0.4, 2)))
 
         dur = e - s
         if dur <= 0.3:
