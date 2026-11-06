@@ -104,11 +104,11 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
             "3. Rôle narratif : Est-ce un sketch comique visuel (gag de vitesse/surveillance de responsable), une mise en place de vanne parlee, une chute comique, ou un moment burger gourmand ?\n"
             "4. Horodatages chirurgicaux de parole & silences :\n"
             "   - debut_parole : seconde exacte ou commence la parole (ou l'action comique clef).\n"
-            "   - fin_parole : seconde exacte ou se termine la replique ou l'action comique.\n"
+            "   - fin_parole : seconde exacte ou se termine la TOUTE DERNIERE replique, chute, reponse ou mot prononce (REGLE ABSOLUE : s'il y a un echange ou question/reponse entre plusieurs personnes avec un silence ou sourire au milieu, fin_parole DOIT OBLIGATOIREMENT aller jusqu'a la fin de la reponse de la derniere personne et englober tout le dialogue ! Ne t'arrete jamais a la question initiale).\n"
             "   - pause_debut_secondes : secondes d'attente au debut avant que l'action commence.\n"
-            "   - pause_fin_secondes : secondes de flottement a la fin apres la fin de l'action.\n"
+            "   - pause_fin_secondes : secondes de flottement a la fin apres la toute derniere parole prononcee.\n"
             "   - cut_in_recommande : horodatage ideal de debut pour demarrer direct sur l'action.\n"
-            "   - cut_out_recommande : horodatage ideal de fin pour couper NET sans temps mort.\n"
+            "   - cut_out_recommande : horodatage ideal de fin pour couper NET apres la derniere parole sans couper le dernier mot.\n"
             "   - action_fin : description de la fin du rush (ex: sourit, regarde camera, coupe).\n\n"
             "Reponds STRICTEMENT en JSON valide :\n"
             "{\n"
@@ -126,7 +126,7 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
             "}"
         )
 
-        for model_name in ["gemini-3-flash-preview", "gemini-3.1-flash-lite"]:
+        for model_name in ["gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]:
             try:
                 res = client.models.generate_content(
                     model=model_name,
@@ -205,10 +205,11 @@ Voici l'analyse visuelle et audio detaillee de chaque rush brut disponible ({len
 Duree indicative cible : {target_duration} secondes (format reseaux sociaux flexible : entre 12s et 40s max).
 
 EXIGENCES CAPITALES DE RYTHME ET COUPE (PACING VIRAL TIKTOK / REELS) :
-1. SUPPRESSION IMPERATIVE DES PAUSES ET TEMPS MORTS EN FIN DE RUSH :
-   - A la fin des rushs, la personne a souvent fini sa replique et reste fittee, sourit timidement, attend ou regarde la camera avant de couper l'enregistrement.
-   - Tu DOIS couper NET immediatement des que la derniere replique ou la reaction comique est terminee (au niveau de 'cut_out_recommande' ou 'fin_parole' + 0.15s max).
-   - NE LAISSE JAMAIS TRAINER une pause, un silence ou un temps mort a la fin d'un segment !
+1. SUPPRESSION DES PAUSES ET TEMPS MORTS EN FIN DE RUSH :
+   - A la fin des rushs longs, la personne a souvent fini sa replique et reste figee, sourit timidement, attend ou regarde la camera avant de couper l'enregistrement.
+   - Tu peux couper des que la derniere replique ou la reaction comique est terminee (au niveau de 'cut_out_recommande' ou 'fin_parole' + 0.3s).
+   - REGLE CRITIQUE POUR LES DIALOGUES ET ECHANGES : Si un rush contient un dialogue ou une question/reponse entre deux personnes (ex: 'Qu'est-ce qu'on mange ?' suivi d'un temps puis de la reponse 'Des pâtes !'), NE COUPE SURTOUT PAS AVANT LA REPONSE ! La punchline finale doit etre entendue en entier.
+   - REGLE ABSOLUE POUR LES RUSHS COURTS (<= 5.5s) : Ce sont des rushs deja concis (hook, punchline, CTA). Conserve imperativement l'integralite du rush (start=0.0, end=duree_totale) afin de ne jamais tronquer une reponse ou punchline.
 2. RACCORDEMENT FLUIDE ET DYNAMIQUE ENTRE LES RUSHS :
    - Demarre chaque rush directement a 'cut_in_recommande' (ou debut_parole) pour supprimer l'hesitation initiale.
    - L'enchainement entre la fin du rush precedent et le debut du rush suivant doit etre ultra-fluide, dynamique et sans trou sonore (jump-cut / match-cut viral).
@@ -269,7 +270,7 @@ Reponds STRICTEMENT en format JSON valide :
   ]
 }}
 """
-    for model_name in ["gemini-3-flash-preview", "gemini-3.1-flash-lite"]:
+    for model_name in ["gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]:
         try:
             print(f"[AI Director] Synthese directoriale du montage avec {model_name}...", flush=True)
             res = client.models.generate_content(
@@ -394,6 +395,11 @@ def validate_and_sanitize_plan(
         e = min(v_dur, max(s + 0.8, float(seg.get("end", s + 4.0))))
 
         # Precise dead pause trimming using rush analysis if available
+        # Short rushs (<= 5.5s) are already tight (hooks, punchlines, CTAs): preserve full duration
+        is_short_rush = v_dur <= 5.5
+        if is_short_rush:
+            e = v_dur
+
         if rush_analyses and f_idx < len(rush_analyses):
             ra = rush_analyses[f_idx]
             rec_in = ra.get("cut_in_recommande")
@@ -401,15 +407,16 @@ def validate_and_sanitize_plan(
             fin_p = ra.get("fin_parole")
             pause_fin = ra.get("pause_fin_secondes", 0.0)
 
-            # Prune initial dead hesitation if cut started at 0
-            if s < 0.2 and rec_in is not None and rec_in > 0.4:
+            # Prune initial dead hesitation if cut started at 0 (only on longer rushs)
+            if not is_short_rush and s < 0.2 and rec_in is not None and rec_in > 0.4:
                 s = rec_in
 
-            # If segment end trails into dead air or lingering pause, clamp it right after speech
-            if pause_fin >= 0.5 and fin_p and e > (fin_p + 0.25):
-                e = min(v_dur, max(s + 0.8, fin_p + 0.15))
-            elif rec_out and e > (rec_out + 0.3):
-                e = min(v_dur, max(s + 0.8, rec_out))
+            # For longer rushs, if segment end trails into significant dead air (>= 1.0s), clamp with safety margin
+            if not is_short_rush:
+                if pause_fin >= 1.0 and fin_p and e > (fin_p + 0.6):
+                    e = min(v_dur, max(s + 0.8, fin_p + 0.5))
+                elif rec_out and e > (rec_out + 0.5):
+                    e = min(v_dur, max(s + 0.8, rec_out + 0.2))
 
         dur = e - s
         if dur <= 0.3:
