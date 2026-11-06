@@ -205,11 +205,10 @@ Voici l'analyse visuelle et audio detaillee de chaque rush brut disponible ({len
 Duree indicative cible : {target_duration} secondes (format reseaux sociaux flexible : entre 12s et 40s max).
 
 EXIGENCES CAPITALES DE RYTHME ET COUPE (PACING VIRAL TIKTOK / REELS) :
-1. SUPPRESSION DES PAUSES ET TEMPS MORTS EN FIN DE RUSH :
-   - A la fin des rushs longs, la personne a souvent fini sa replique et reste figee, sourit timidement, attend ou regarde la camera avant de couper l'enregistrement.
-   - Tu peux couper des que la derniere replique ou la reaction comique est terminee (au niveau de 'cut_out_recommande' ou 'fin_parole' + 0.3s).
-   - REGLE CRITIQUE POUR LES DIALOGUES ET ECHANGES : Si un rush contient un dialogue ou une question/reponse entre deux personnes (ex: 'Qu'est-ce qu'on mange ?' suivi d'un temps puis de la reponse 'Des pâtes !'), NE COUPE SURTOUT PAS AVANT LA REPONSE ! La punchline finale doit etre entendue en entier.
-   - REGLE ABSOLUE POUR LES RUSHS COURTS (<= 5.5s) : Ce sont des rushs deja concis (hook, punchline, CTA). Conserve imperativement l'integralite du rush (start=0.0, end=duree_totale) afin de ne jamais tronquer une reponse ou punchline.
+1. SUPPRESSION DES PAUSES ET TEMPS MORTS (RUSHS COURTS OU LONGS) :
+   - Sur N'IMPORTE QUEL rush (court ou long), supprime les hesitations initiales (debut avant parole/action) et les temps morts de fin (regard camera, attente avant de couper).
+   - Utilise 'cut_in_recommande' et 'cut_out_recommande' pour ne garder que le contenu utile, dynamique et percutant.
+   - REGLE CRITIQUE POUR LES DIALOGUES ET ECHANGES : Si un rush contient un echange ou dialogue avec une courte pause naturelle entre les phrases (ex: une question, puis un temps de silence/sourire, puis la reponse 'Des pâtes !'), NE COUPE SURTOUT PAS au milieu ! La replique finale fait partie integrante de la scene et doit etre conservee jusqu'au dernier mot prononce.
 2. RACCORDEMENT FLUIDE ET DYNAMIQUE ENTRE LES RUSHS :
    - Demarre chaque rush directement a 'cut_in_recommande' (ou debut_parole) pour supprimer l'hesitation initiale.
    - L'enchainement entre la fin du rush precedent et le debut du rush suivant doit etre ultra-fluide, dynamique et sans trou sonore (jump-cut / match-cut viral).
@@ -395,28 +394,26 @@ def validate_and_sanitize_plan(
         e = min(v_dur, max(s + 0.8, float(seg.get("end", s + 4.0))))
 
         # Precise dead pause trimming using rush analysis if available
-        # Short rushs (<= 5.5s) are already tight (hooks, punchlines, CTAs): preserve full duration
-        is_short_rush = v_dur <= 5.5
-        if is_short_rush:
-            e = v_dur
-
+        # Trims confirmed dead air and hesitations on ANY rush (short or long) without cutting legitimate speech
         if rush_analyses and f_idx < len(rush_analyses):
             ra = rush_analyses[f_idx]
             rec_in = ra.get("cut_in_recommande")
             rec_out = ra.get("cut_out_recommande")
             fin_p = ra.get("fin_parole")
-            pause_fin = ra.get("pause_fin_secondes", 0.0)
+            pause_fin = float(ra.get("pause_fin_secondes", 0.0) or 0.0)
 
-            # Prune initial dead hesitation if cut started at 0 (only on longer rushs)
-            if not is_short_rush and s < 0.2 and rec_in is not None and rec_in > 0.4:
-                s = rec_in
+            # Prune initial dead hesitation if cut started at 0 and action/speech starts significantly later (>= 0.7s)
+            if s < 0.2 and rec_in is not None and rec_in >= 0.7:
+                s = round(rec_in, 2)
 
-            # For longer rushs, if segment end trails into significant dead air (>= 1.0s), clamp with safety margin
-            if not is_short_rush:
-                if pause_fin >= 1.0 and fin_p and e > (fin_p + 0.6):
-                    e = min(v_dur, max(s + 0.8, fin_p + 0.5))
-                elif rec_out and e > (rec_out + 0.5):
-                    e = min(v_dur, max(s + 0.8, rec_out + 0.2))
+            # Trim trailing dead air ONLY if there is confirmed lingering pause (pause_fin >= 1.0s)
+            # and the planned end goes significantly past all speech/action (e > fin_p + 0.8s).
+            # Always leave a safety buffer of at least +0.4s so syllables / punchlines are never clipped.
+            if pause_fin >= 1.0 and fin_p and e > (fin_p + 0.8):
+                safe_out = max(rec_out if rec_out else 0.0, fin_p + 0.4)
+                e = min(v_dur, max(s + 0.8, round(safe_out, 2)))
+            elif rec_out and e > (rec_out + 0.8):
+                e = min(v_dur, max(s + 0.8, round(rec_out + 0.3, 2)))
 
         dur = e - s
         if dur <= 0.3:
