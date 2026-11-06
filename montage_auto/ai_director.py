@@ -126,7 +126,7 @@ def analyze_single_rush(client: genai.Client, video_path: Path, scratch_dir: Pat
             "}"
         )
 
-        for model_name in ["gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]:
+        for model_name in ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview"]:
             try:
                 res = client.models.generate_content(
                     model=model_name,
@@ -279,7 +279,7 @@ Reponds STRICTEMENT en format JSON valide :
   ]
 }}
 """
-    for model_name in ["gemini-3-flash-preview", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]:
+    for model_name in ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview"]:
         try:
             print(f"[AI Director] Synthese directoriale du montage avec {model_name}...", flush=True)
             res = client.models.generate_content(
